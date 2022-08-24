@@ -1,4 +1,5 @@
 .data 
+isrunnig: .byte 1
 stage1: .string "stage1.bin"
 yellow: .string "BixoAmareloCerto.bin"
 yellow_position: .byte 70, 50
@@ -66,10 +67,60 @@ loop:
 	ecall					# closes file
 .end_macro 
 
+.macro CHECK_KEYPRESS()
+	li t1,0xFF200000		# carrega o endere�o de controle do KDMMIO
+	lw t0,0(t1)				# Le bit de Controle Teclado
+	andi t0,t0,0x0001		# mascara o bit menos significativo
+   	beq t0,zero,loop 	   	# Se n�o h� tecla pressionada ent�o vai para FIM
+  	lw t2,4(t1)  			# le o valor da tecla tecla
+move_tank:
+	li t3, 119
+	beq t2, t3, up
+	li t3, 115
+	beq t2, t3, down
+	li t3, 100
+	beq t2, t3, right
+	li t3, 97
+	beq t2, t3, left
+	j loop
+up:
+la t0, yellow_position
+	lb t1, 0(t0)
+	addi t1, t1, -1
+	sb t1, 0(t0) 
+	j loop
+down:
+la t0, yellow_position
+	lb t1, 0(t0)
+	addi t1, t1, 1
+	sb t1, 0(t0)
+	j loop
+left: 
+la t0, yellow_position
+	lb t1, 1(t0)
+	addi t1, t1, -1
+	sb t1, 1(t0)
+	j loop
+right:
+la t0, yellow_position
+	lb t1, 1(t0)
+	addi t1, t1, 1
+	sb t1, 1(t0)
+	j loop
+	
+.end_macro
+
 .text
 	PRINT_MAP(stage1)
- 	PRINT_CHARACTER(yellow , yellow_position, yellow_dimensions)
-  
+
+ loop:	
+  	PRINT_CHARACTER(yellow , yellow_position, yellow_dimensions)
+ 	CHECK_KEYPRESS()
+  	lb t0, isrunnig
+  	bne t0, zero, loop
+  	
+  	
+  	
 FIM: 
  	li a7, 10
  	ecall
