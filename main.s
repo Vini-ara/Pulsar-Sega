@@ -1,7 +1,7 @@
 .data 
 isrunnig: .byte 1
 stage1: .string "stage1.bin"
-yellow: .string "BixoAmareloCerto.bin"
+yellow: .string "tank.bin"
 yellow_position: .byte 70, 50
 yellow_dimensions: .byte 12, 9
 	
