@@ -1,11 +1,12 @@
 .data 
 isrunnig: .byte 1
 stage1: .string "stage1.bin"
-yellow: .string "tank.bin"
-yellow_position: .byte 70, 50
-yellow_dimensions: .byte 12, 9
+black_tile: .string "TankBlackTile.bin"
+tank: .string "tank.bin"
+tank_position: .half 70, 50		# (y, x) 
+tank_dimensions: .byte 12, 9	# (heingth, width)
+tank_direction: .byte 0 		# 0 = up, 1 = down, 2 = right, 3 = left
 	
-
 .macro PRINT_MAP(%fileName)
  	la a0, %fileName 		# loads file-name string
  	li a1, 0				# open file for reading
@@ -26,7 +27,7 @@ yellow_dimensions: .byte 12, 9
 .end_macro
 
 # Takes a filename label and a starting position label(2 bytes)
-.macro  PRINT_CHARACTER(%fileName , %position, %dimensions)
+.macro  PRINT_CHARACTER(%fileName , %position, %dimensions, %direction)
 	la a0, %fileName	# loads file name
 	li a1, 0			# read file
 	li a2, 0		
@@ -34,13 +35,13 @@ yellow_dimensions: .byte 12, 9
 	ecall				# opens file
 	
 	la t0, %position	# where the positions are saved
-	lb t1, 0(t0)		# loads y position
+	lh t1, 0(t0)		# loads y position
 	li t2, 320 			# line widht
 	
 	mul t2, t2, t1		# right y axis position	
 	li t3, 0xFF000000   # vga address
 	add t3, t3, t2		# character y position
-	lb t1, 1(t0)		# gets x axis position
+	lh t1, 2(t0)		# gets x axis position
 	
 	add t3, t3, t1		# character position
 	
@@ -74,52 +75,54 @@ loop:
    	beq t0,zero,loop 	   	# Se n�o h� tecla pressionada ent�o vai para FIM
   	lw t2,4(t1)  			# le o valor da tecla tecla
 move_tank:
-	li t3, 119
-	beq t2, t3, up
-	li t3, 115
-	beq t2, t3, down
-	li t3, 100
-	beq t2, t3, right
-	li t3, 97
-	beq t2, t3, left
-	j loop
+
+	li t3, 119        # letra "w"
+	beq t2, t3, up    # se for "w" move para cima
+	li t3, 115        # letra "s" 
+	beq t2, t3, down  # se for "s" vai para baixo
+	li t3, 100        # letra "d"  
+	beq t2, t3, right # se for "d" vai para direita
+	li t3, 97         # letra "a" 
+	beq t2, t3, left  # se for letra "a" vai para esquerda
+	j loop            # se n for nada volta para o loop
 up:
-la t0, yellow_position
-	lb t1, 0(t0)
-	addi t1, t1, -1
-	sb t1, 0(t0) 
+  PRINT_CHARACTER(black_tile, tank_position, tank_dimensions, tank_direction)
+	la t0, tank_position 
+	lh t1, 0(t0)
+	addi t1, t1, -2
+	sh t1, 0(t0) 
 	j loop
 down:
-la t0, yellow_position
-	lb t1, 0(t0)
-	addi t1, t1, 1
-	sb t1, 0(t0)
+  PRINT_CHARACTER(black_tile, tank_position, tank_dimensions, tank_direction)
+	la t0, tank_position
+	lh t1, 0(t0)
+	addi t1, t1, 2
+	sh t1, 0(t0)
 	j loop
 left: 
-la t0, yellow_position
-	lb t1, 1(t0)
-	addi t1, t1, -1
-	sb t1, 1(t0)
+  PRINT_CHARACTER(black_tile, tank_position, tank_dimensions, tank_direction)
+	la t0, tank_position
+	lh t1, 2(t0)
+	addi t1, t1, -2
+	sh t1, 2(t0)
 	j loop
 right:
-la t0, yellow_position
-	lb t1, 1(t0)
-	addi t1, t1, 1
-	sb t1, 1(t0)
+  PRINT_CHARACTER(black_tile, tank_position, tank_dimensions, tank_direction)
+	la t0, tank_position
+	lh t1, 2(t0)
+	addi t1, t1, 2
+	sh t1, 2(t0)
 	j loop
-	
 .end_macro
 
 .text
 	PRINT_MAP(stage1)
 
  loop:	
-  	PRINT_CHARACTER(yellow , yellow_position, yellow_dimensions)
- 	CHECK_KEYPRESS()
+  	PRINT_CHARACTER(tank , tank_position, tank_dimensions, tank_direction)
+   	CHECK_KEYPRESS()
   	lb t0, isrunnig
   	bne t0, zero, loop
-  	
-  	
   	
 FIM: 
  	li a7, 10
