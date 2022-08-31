@@ -4,17 +4,18 @@ isrunnig: .byte 1
 
 # sprites names
 stage1: .string "stage1.bin"
-black_tile: .string "TankBlackTile.bin"
+tank_clear: .string "TankBlackTile.bin"
 tank: .string "tank.bin"
 
 # sprites data
 tank_bin: .space 64
-tank_clear_bin: .space 64
+tank_clear_bin: .space 32
 
 # character info
-tank_position: .half 190, 20		# (y, x) 
-tank_old_position: .half 0, 0		# (y, x)
-tank_dimensions: .byte 8, 8	# (heingth, width)
+tank_position: .half 20, 190		# (x, y) 
+tank_old_position: .half 0, 0		# (x, y)
+tank_dimensions: .byte 8, 8	# (width, height)
+tank_clear_dimensions: .byte 8, 4 # (width, height)
 tank_direction: .byte 0 		# 0 = up, 1 = down, 2 = right, 3 = left
 
 .text
@@ -24,8 +25,8 @@ SETUP:
 	la s1, tank_bin
 	call OPEN_FILE
 	
-	la a0, black_tile
-	la t0, tank_dimensions
+	la a0,	tank_clear
+	la t0, tank_clear_dimensions
 	la s1, tank_clear_bin
  	call OPEN_FILE
 
@@ -40,24 +41,22 @@ SETUP:
  GAME_LOOP:
 	xori s0, s0, 1
  	call CHECK_KEYPRESS
- 		
+ 	
+ 	la t0, tank_position
+ 	la t1, tank_dimensions
+ 	
  	la a0, tank_bin
- 	la a1, tank_position
- 	la a2, tank_dimensions
- 	lb a3, tank_direction
- 	mv a4, s0
+ 	lh a1, 0(t0)
+ 	lh a2, 2(t0)
+ 	lb a3, 0(t1)
+ 	lb a4, 1(t1)
+ 	lb a5, tank_direction
+ 	mv a6, s0
   	call PRINT		# prints tank
   	
   	li t0, 0xFF200604
  	sw s0, 0(t0)
  	
- 	la a0, tank_clear_bin
- 	la a1, tank_old_position
- 	la a2, tank_dimensions
- 	lb a3, tank_direction
- 	mv a4, s0
- 	call PRINT
-   	
   	lb t0, isrunnig		# checks if game is still running
   	bne t0, zero, GAME_LOOP
  
@@ -108,9 +107,9 @@ UP:
 	lw t2, 0(t0) 		# loads the hole position vector
 	sw t2, 0(t1) 		# saves the postion vector into old position one
 	
-	lh t1, 0(t0)		# loads y position value
+	lh t1, 2(t0)		# loads y position value
 	addi t1, t1, -4		# moves up 2 pixels	
-	sh t1, 0(t0)		# saves new value back in memory
+	sh t1, 2(t0)		# saves new value back in memory
 	
 	la t0, tank_direction	# loads direction addr
 	li t2, 0		# digit 0 reference
@@ -122,9 +121,9 @@ DOWN:
 	lw t2, 0(t0) 		# loads the hole position vector
 	sw t2, 0(t1) 		# saves the postion vector into old position one
 	
-	lh t1, 0(t0)		# loads y position value
+	lh t1, 2(t0)		# loads y position value
 	addi t1, t1, 4		# moves down 2 pixels
-	sh t1, 0(t0)		# saves new value back in memory
+	sh t1, 2(t0)		# saves new value back in memory
 	
 	la t0, tank_direction	# loads direction addr
 	li t2, 1		# digit 1 reference
@@ -136,9 +135,9 @@ RIGHT:
 	lw t2, 0(t0) 		# loads the hole position vector
 	sw t2, 0(t1) 		# saves the postion vector into old position one
 	
-	lh t1, 2(t0)		# loads x position value
+	lh t1, 0(t0)		# loads x position value
 	addi t1, t1, 4		# moves right 2 pixels
-	sh t1, 2(t0)		# saves new value back in memory
+	sh t1, 0(t0)		# saves new value back in memory
 		
 	la t0, tank_direction	# loads direction addr
 	li t2, 2		# digit 2 reference
@@ -150,9 +149,9 @@ LEFT:
 	lw t2, 0(t0) 		# loads the hole position vector
 	sw t2, 0(t1) 		# saves the postion vector into old position one
 	
-	lh t1, 2(t0)		# loads x postion value
+	lh t1, 0(t0)		# loads x postion value
 	addi t1, t1, -4		# moves	left 2 pixels
-	sh t1, 2(t0)		# saves new value back in memory
+	sh t1, 0(t0)		# saves new value back in memory
 	
 	la t0, tank_direction	# loads direction addr
 	li t2, 3		# digit 3 reference
@@ -186,36 +185,38 @@ PRINT_MAP:
  	ret
  
 # a0 = content to print
-# a1 = position to print
-# a2 = dimension of the content
-# a3 = direction to print 	
-# a4 = frame 1 or 0	
-PRINT:
-	mv t0, a1
-	lh t1, 0(t0)			# loads y position
-	li t2, 320 			# line widht
+# a1 = x postion
+# a2 = y position
+# a3 = width
+# a4 = height
+# a5 = direction to print 	
+# a6 = frame 1 or 0
 	
-	mul t2, t2, t1			# pixel to start printing
+PRINT:
+	mv t0, a2
+	li t1, 320 			# line widht
+	mul t0, t1, t0			# line to start printing
 	
 	li t3, 0xFF0   			# vga address
-	add t3, t3, a4			# alternates frame
+	add t3, t3, a6			# alternates frame
 	slli t3, t3, 20			# adds all the 5 zeros that were remaining to the address
-	add t3, t3, t2			# memory address of the line to start printing
-	lh t1, 2(t0)			# gets x axis position
-	add t3, t3, t1			# memory address to start printing
 	
-	mv t0, a2
-	lb s2, 1(t0)			# image height
-	lb s3, 0(t0)			# image width
+	add t3, t3, t0			# memory address of the line to start printing
+	
+	mv t0, a1
+	add t3, t3, t0			# memory address to start printing
+	
+	mv s2, a4			# image height
+	mv s3, a3			# image width
 	
 	mv s1, a0			# image data address
 	
 	li t1, 1			# down direction code
-	beq t1, a3, PRINT_DOWN		# check if going down
+	beq t1, a5, PRINT_DOWN		# check if going down
 	li t1, 2			# right direction code
-	beq t1, a3, PRINT_RIGHT		# check if going right
+	beq t1, a5, PRINT_RIGHT		# check if going right
 	li t1, 3			# left direction code
-	beq t1, a3, PRINT_LEFT		# check if going left
+	beq t1, a5, PRINT_LEFT		# check if going left
 
 PRINT_UP:
 	mv t0, s1
