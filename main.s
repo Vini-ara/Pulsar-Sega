@@ -15,7 +15,7 @@ tank_clear_bin: .space 32
 tank_position: .half 20, 190		# (x, y) 
 tank_old_position: .half 0, 0		# (x, y)
 tank_dimensions: .byte 8, 8	# (width, height)
-tank_clear_dimensions: .byte 8, 4 # (width, height)
+tank_clear_dimensions: .byte 8, 8 # (width, height)
 tank_direction: .byte 0 		# 0 = up, 1 = down, 2 = right, 3 = left
 
 .text
@@ -56,7 +56,19 @@ SETUP:
   	
   	li t0, 0xFF200604
  	sw s0, 0(t0)
- 	
+
+	la t0, tank_old_position
+	la t1, tank_clear_dimensions
+	
+	la a0, tank_clear_bin
+	lh a1, 0(t0)
+	lh a2, 2(t0)
+	lb a3, 0(t1)
+	lb a4, 1(t1)
+	lb a5, tank_direction
+	mv a6, s0
+	call PRINT
+ 	 	
   	lb t0, isrunnig		# checks if game is still running
   	bne t0, zero, GAME_LOOP
  
@@ -108,7 +120,7 @@ UP:
 	sw t2, 0(t1) 		# saves the postion vector into old position one
 	
 	lh t1, 2(t0)		# loads y position value
-	addi t1, t1, -4		# moves up 2 pixels	
+	addi t1, t1, -8	# moves up 2 pixels	
 	sh t1, 2(t0)		# saves new value back in memory
 	
 	la t0, tank_direction	# loads direction addr
@@ -122,7 +134,7 @@ DOWN:
 	sw t2, 0(t1) 		# saves the postion vector into old position one
 	
 	lh t1, 2(t0)		# loads y position value
-	addi t1, t1, 4		# moves down 2 pixels
+	addi t1, t1, 8		# moves down 2 pixels
 	sh t1, 2(t0)		# saves new value back in memory
 	
 	la t0, tank_direction	# loads direction addr
@@ -136,7 +148,7 @@ RIGHT:
 	sw t2, 0(t1) 		# saves the postion vector into old position one
 	
 	lh t1, 0(t0)		# loads x position value
-	addi t1, t1, 4		# moves right 2 pixels
+	addi t1, t1, 8		# moves right 2 pixels
 	sh t1, 0(t0)		# saves new value back in memory
 		
 	la t0, tank_direction	# loads direction addr
@@ -150,7 +162,7 @@ LEFT:
 	sw t2, 0(t1) 		# saves the postion vector into old position one
 	
 	lh t1, 0(t0)		# loads x postion value
-	addi t1, t1, -4		# moves	left 2 pixels
+	addi t1, t1, -8		# moves	left 2 pixels
 	sh t1, 0(t0)		# saves new value back in memory
 	
 	la t0, tank_direction	# loads direction addr
