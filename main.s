@@ -3,20 +3,34 @@
 isrunnig: .byte 1
 
 # sprites names
-stage1: .string "stage1.bin"
-tank_clear: .string "TankBlackTile.bin"
-tank: .string "tank.bin"
+stage1: .string "stage1/stage1.bin"
+tank_clear: .string "blackTile/TankBlackTile.bin"
+tank: .string "tank/tank.bin"
+key1: .string "key1/key1.bin" 
+key2: .string "key2/key2.bin"
 
 # sprites data
 tank_bin: .space 64
-tank_clear_bin: .space 32
+tank_clear_bin: .space 64
+key1_bin: .space 96
+key2_bin: .space 96
 
 # character info
 tank_position: .half 20, 190		# (x, y) 
 tank_old_position: .half 0, 0		# (x, y)
-tank_dimensions: .byte 8, 8	# (width, height)
-tank_clear_dimensions: .byte 8, 8 # (width, height)
+tank_dimensions: .byte 8, 8		# (width, height)
+tank_clear_dimensions: .byte 8, 8 	# (width, height)
 tank_direction: .byte 0 		# 0 = up, 1 = down, 2 = right, 3 = left
+
+# key1 info
+key1_position: .half 200, 16
+key1_dimensions: .byte 12, 8
+key1_direction: .byte 1
+
+# key2 info
+key2_position: .half 230, 16
+key2_dimensions: .byte 12, 8
+key2_direction: .byte 1
 
 .text
 SETUP:
@@ -29,6 +43,10 @@ SETUP:
 	la t0, tank_clear_dimensions
 	la s1, tank_clear_bin
  	call OPEN_FILE
+ 	
+ 	la a0, key1
+	la a1, key_dimensions
+	call OPEN_FILE
 
 	la a0, stage1
 	li a1, 0
@@ -120,7 +138,7 @@ UP:
 	sw t2, 0(t1) 		# saves the postion vector into old position one
 	
 	lh t1, 2(t0)		# loads y position value
-	addi t1, t1, -8	# moves up 2 pixels	
+	addi t1, t1, -8		# moves up 2 pixels	
 	sh t1, 2(t0)		# saves new value back in memory
 	
 	la t0, tank_direction	# loads direction addr
