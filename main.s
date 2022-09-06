@@ -16,7 +16,7 @@ key1_bin: .space 96
 key2_bin: .space 96
 
 # character info
-tank_position: .half 20, 190		# (x, y) 
+tank_position: .half 13, 209		# (x, y) 
 tank_old_position: .half 0, 0		# (x, y)
 tank_dimensions: .byte 8, 8		# (width, height)
 tank_clear_dimensions: .byte 8, 8 	# (width, height)
@@ -25,7 +25,7 @@ tank_direction: .byte 0 		# 0 = up, 1 = down, 2 = right, 3 = left
 # key1 info
 key1_position: .half 200, 16
 key1_dimensions: .byte 12, 8
-key1_direction: .byte 1
+key1_direction: .byte 2
 
 # key2 info
 key2_position: .half 230, 16
@@ -45,7 +45,13 @@ SETUP:
  	call OPEN_FILE
  	
  	la a0, key1
-	la a1, key_dimensions
+	la t0, key1_dimensions
+	la s1, key1_bin
+	call OPEN_FILE
+	
+	la a0, key2
+	la t0, key2_dimensions
+	la s1, key2_bin
 	call OPEN_FILE
 
 	la a0, stage1
@@ -55,6 +61,10 @@ SETUP:
 	la a0, stage1
 	li a1, 1
 	call PRINT_MAP
+	
+	
+	
+	
 	
  GAME_LOOP:
 	xori s0, s0, 1
@@ -84,6 +94,18 @@ SETUP:
 	lb a3, 0(t1)
 	lb a4, 1(t1)
 	lb a5, tank_direction
+	mv a6, s0
+	call PRINT
+	
+	la t0, key1_position
+	la t1, key1_dimensions
+	
+	la a0, key1_bin
+	lh a1, 0(t0)
+	lh a2, 2(t0)
+	lb a3, 0(t1)
+	lb a4, 1(t1)
+	lb a5, key1_direction
 	mv a6, s0
 	call PRINT
  	 	
@@ -134,8 +156,10 @@ CHECK_KEYPRESS:
 UP:	
 	la t0, tank_position 	# loads position addr
 	la t1, tank_old_position # loads old postion addr
-	lw t2, 0(t0) 		# loads the hole position vector
-	sw t2, 0(t1) 		# saves the postion vector into old position one
+	lh t2, 0(t0) 		# loads the hole position vector
+	lh t3, 2(t0)
+	sh t2, 0(t1) 		# saves the postion vector into old position one
+	sh t3, 2(t1)
 	
 	lh t1, 2(t0)		# loads y position value
 	addi t1, t1, -8		# moves up 2 pixels	
@@ -146,10 +170,12 @@ UP:
 	sb t2, 0(t0)		# saves 0 as direction val
 	j FIM 
 DOWN:
-	la t0, tank_position    # loads position addr
+	la t0, tank_position 	# loads position addr
 	la t1, tank_old_position # loads old postion addr
-	lw t2, 0(t0) 		# loads the hole position vector
-	sw t2, 0(t1) 		# saves the postion vector into old position one
+	lh t2, 0(t0) 		# loads the hole position vector
+	lh t3, 2(t0)
+	sh t2, 0(t1) 		# saves the postion vector into old position one
+	sh t3, 2(t1)	# saves the postion vector into old position one
 	
 	lh t1, 2(t0)		# loads y position value
 	addi t1, t1, 8		# moves down 2 pixels
@@ -160,10 +186,12 @@ DOWN:
 	sb t2, 0(t0)		# saves 1 as direction val
 	j FIM 
 RIGHT:
-	la t0, tank_position	# loads position addr
+	la t0, tank_position 	# loads position addr
 	la t1, tank_old_position # loads old postion addr
-	lw t2, 0(t0) 		# loads the hole position vector
-	sw t2, 0(t1) 		# saves the postion vector into old position one
+	lh t2, 0(t0) 		# loads the hole position vector
+	lh t3, 2(t0)
+	sh t2, 0(t1) 		# saves the postion vector into old position one
+	sh t3, 2(t1)		# saves the postion vector into old position one
 	
 	lh t1, 0(t0)		# loads x position value
 	addi t1, t1, 8		# moves right 2 pixels
@@ -174,10 +202,12 @@ RIGHT:
 	sb t2, 0(t0)		# saves 2 as direction val
 	j FIM
 LEFT: 
-	la t0, tank_position	# loads position addr
+	la t0, tank_position 	# loads position addr
 	la t1, tank_old_position # loads old postion addr
-	lw t2, 0(t0) 		# loads the hole position vector
-	sw t2, 0(t1) 		# saves the postion vector into old position one
+	lh t2, 0(t0) 		# loads the hole position vector
+	lh t3, 2(t0)
+	sh t2, 0(t1) 		# saves the postion vector into old position one
+	sh t3, 2(t1) 		# saves the postion vector into old position one
 	
 	lh t1, 0(t0)		# loads x postion value
 	addi t1, t1, -8		# moves	left 2 pixels
@@ -299,7 +329,7 @@ RIGHT_LINE_LOOP:
 	lb t4, 0(t0)
 	sb t4, 0(t3)
 	addi t3, t3, 1
-	sub t0, t0, s2
+	sub t0, t0, s3
 	addi t2, t2, 1
 	blt t2, s2, RIGHT_LINE_LOOP
 	
@@ -311,7 +341,7 @@ RIGHT_LINE_LOOP:
 	addi t5, t5, 1
 	add t0, t5, t0
 	addi t3, t3, 320		# goes to next line
-	sub t3, t3, s3
+	sub t3, t3, s2
 	blt t5, s3, RIGHT_LOOP
 	j PRINT_END
 PRINT_LEFT:
@@ -328,7 +358,7 @@ LEFT_LINE_LOOP:
 	blt t2, s2, LEFT_LINE_LOOP
 	
 	addi t3, t3, 320		# goes to next line
-	sub t3, t3, s3
+	sub t3, t3, s2
 	mv t0, s1
 	addi t1, t1, 1
 	add t0, t0, t1
