@@ -1,4 +1,9 @@
-.data 
+.text
+# vazio = 0, parede = 1, player = 2, chave = 3
+
+.include "matriz_mapa1.data"
+location_matrix: .half 865 # usado pra verificar os espa�os em volta
+
 # game constants
 isrunnig: .byte 1
 
@@ -23,13 +28,13 @@ tank_clear_dimensions: .byte 8, 8 	# (width, height)
 tank_direction: .byte 0 		# 0 = up, 1 = down, 2 = right, 3 = left
 
 # key1 info
-key1_position: .half 200, 16
-key1_dimensions: .byte 12, 8
+key1_position: .half 197, 17
+key1_dimensions: .byte 8, 7
 key1_direction: .byte 2
 
 # key2 info
 key2_position: .half 230, 16
-key2_dimensions: .byte 12, 8
+key2_dimensions: .byte 8, 7
 key2_direction: .byte 1
 
 .text
@@ -61,9 +66,6 @@ SETUP:
 	la a0, stage1
 	li a1, 1
 	call PRINT_MAP
-	
-	
-	
 	
 	
  GAME_LOOP:
@@ -154,6 +156,28 @@ CHECK_KEYPRESS:
 	j FIM
 
 UP:	
+	# defines the direction the tank is facing before we checks colision (suggestion)
+	la t0, tank_direction	# loads direction addr
+	li t2, 0		# digit 0 reference
+	sb t2, 0(t0)		# saves 0 as direction val
+	
+	la t0, MATRIX1
+	la t1, location_matrix
+	lh t2, 0(t1)
+	add t3, t0, t2 		# address of the player from the matrix's beginning (sum of his stored position and the address of MATRIX1)
+	addi t4, t3, -36 	# calculates the address above the player (-36, because there are 36 elements in each row)
+	lb t6, 0(t4)
+	li t5, 1
+	beq t6, t5, FIM 	# if the element above is a wall, don't move
+	li t5, 3
+	beq t6, t5, FIM 	# if it's a key, don't move (we can redirect this to a label that changes the player's flag about keys)
+	# if the tank can move:
+	sb zero, 0(t3) 		# stores blank where the player was
+	li t5, 2
+	sb t5, 0(t4) 		# stores the player code where he's going
+	addi t2, t2, -36
+	sh t2, 0(t1) 		# changes the stored starting position in memory
+	
 	la t0, tank_position 	# loads position addr
 	la t1, tank_old_position # loads old postion addr
 	lh t2, 0(t0) 		# loads the hole position vector
@@ -165,11 +189,33 @@ UP:
 	addi t1, t1, -8		# moves up 2 pixels	
 	sh t1, 2(t0)		# saves new value back in memory
 	
-	la t0, tank_direction	# loads direction addr
-	li t2, 0		# digit 0 reference
-	sb t2, 0(t0)		# saves 0 as direction val
+	#la t0, tank_direction	# loads direction addr
+	#li t2, 0		# digit 0 reference
+	#sb t2, 0(t0)		# saves 0 as direction val
 	j FIM 
 DOWN:
+	# defines the direction the tank is facing before we checks colision (suggestion)
+	la t0, tank_direction	# loads direction addr
+	li t2, 1		# digit 1 reference
+	sb t2, 0(t0)		# saves 1 as direction val
+	
+	la t0, MATRIX1
+	la t1, location_matrix
+	lh t2, 0(t1)
+	add t3, t0, t2 		# address of the player from the matrix's beginning (sum of his stored position and the address of MATRIX1)
+	addi t4, t3, 36 	# calculates the address below the player (+36, because there are 36 elements in each row)
+	lb t6, 0(t4)
+	li t5, 1
+	beq t6, t5, FIM 	# if the element below is a wall, don't move
+	li t5, 3
+	beq t6, t5, FIM 	# if it's a key, don't move (we can redirect this to a label that changes the player's flag about keys)
+	# if the tank can move:
+	sb zero, 0(t3) 		# stores blank where the player was
+	li t5, 2
+	sb t5, 0(t4) 		# stores the player code where he's going
+	addi t2, t2, 36
+	sh t2, 0(t1) 		# changes the stored starting position in memory
+	
 	la t0, tank_position 	# loads position addr
 	la t1, tank_old_position # loads old postion addr
 	lh t2, 0(t0) 		# loads the hole position vector
@@ -181,11 +227,33 @@ DOWN:
 	addi t1, t1, 8		# moves down 2 pixels
 	sh t1, 2(t0)		# saves new value back in memory
 	
-	la t0, tank_direction	# loads direction addr
-	li t2, 1		# digit 1 reference
-	sb t2, 0(t0)		# saves 1 as direction val
+	#la t0, tank_direction	# loads direction addr
+	#li t2, 1		# digit 1 reference
+	#sb t2, 0(t0)		# saves 1 as direction val
 	j FIM 
 RIGHT:
+	# defines the direction the tank is facing before we checks colision (suggestion)
+	la t0, tank_direction	# loads direction addr
+	li t2, 2		# digit 2 reference
+	sb t2, 0(t0)		# saves 2 as direction val
+	
+	la t0, MATRIX1
+	la t1, location_matrix
+	lh t2, 0(t1)
+	add t3, t0, t2 		# address of the player from the matrix's beginning (sum of his stored position and the address of MATRIX1)
+	addi t4, t3, 1 		# calculates the address to the right of the player (+1)
+	lb t6, 0(t4)
+	li t5, 1
+	beq t6, t5, FIM 	# if the element to the right is a wall, don't move
+	li t5, 3
+	beq t6, t5, FIM 	# if it's a key, don't move (we can redirect this to a label that changes the player's flag about keys)
+	# if the tank can move:
+	sb zero, 0(t3) 		# stores blank where the player was
+	li t5, 2
+	sb t5, 0(t4) 		# stores the player code where he's going
+	addi t2, t2, 1
+	sh t2, 0(t1) 		# changes the stored starting position in memory
+
 	la t0, tank_position 	# loads position addr
 	la t1, tank_old_position # loads old postion addr
 	lh t2, 0(t0) 		# loads the hole position vector
@@ -197,11 +265,33 @@ RIGHT:
 	addi t1, t1, 8		# moves right 2 pixels
 	sh t1, 0(t0)		# saves new value back in memory
 		
-	la t0, tank_direction	# loads direction addr
-	li t2, 2		# digit 2 reference
-	sb t2, 0(t0)		# saves 2 as direction val
+	#la t0, tank_direction	# loads direction addr
+	#li t2, 2		# digit 2 reference
+	#sb t2, 0(t0)		# saves 2 as direction val
 	j FIM
 LEFT: 
+	# defines the direction the tank is facing before we checks colision (suggestion)
+	la t0, tank_direction	# loads direction addr
+	li t2, 3		# digit 3 reference
+	sb t2, 0(t0)		# saves 3 as direction val
+	
+	la t0, MATRIX1
+	la t1, location_matrix
+	lh t2, 0(t1)
+	add t3, t0, t2 		# address of the player starting the matrix's beginning (sum of his stored position and the address MATRIX1)
+	addi t4, t3, -1 	# calculates the address to the left of the player (-1)
+	lb t6, 0(t4)
+	li t5, 1
+	beq t6, t5, FIM 	# if the element to the left is a wall, don't move
+	li t5, 3
+	beq t6, t5, FIM 	# if it's a key, don't move (we can redirect this to a label that changes the player's flag about keys)
+	# if the tank can move:
+	sb zero, 0(t3) 		# stores blank where the player was
+	li t5, 2
+	sb t5, 0(t4) 		# stores the player code where he's going
+	addi t2, t2, -1
+	sh t2, 0(t1) 		# changes the stored starting position in memory
+
 	la t0, tank_position 	# loads position addr
 	la t1, tank_old_position # loads old postion addr
 	lh t2, 0(t0) 		# loads the hole position vector
@@ -213,9 +303,9 @@ LEFT:
 	addi t1, t1, -8		# moves	left 2 pixels
 	sh t1, 0(t0)		# saves new value back in memory
 	
-	la t0, tank_direction	# loads direction addr
-	li t2, 3		# digit 3 reference
-	sb t2, 0(t0)		# saves 3 as direction val
+	#la t0, tank_direction	# loads direction addr
+	#li t2, 3		# digit 3 reference
+	#sb t2, 0(t0)		# saves 3 as direction val
 	j FIM 
 FIM: 	ret
 
