@@ -1,8 +1,11 @@
-.text
+.data
 # vazio = 0, parede = 1, player = 2, chave = 3
 
+.include "MACROSv21.s"
+
 .include "matriz_mapa1.data"
-location_matrix: .half 865 # usado pra verificar os espaï¿½os em volta
+initial_matrix_location: .half 865 # usado quando o player morrer
+matrix_location: .half 865 # usado pra verificar os espaï¿½os em volta
 
 # game constants
 isrunnig: .byte 1 # defines when the game loop stops
@@ -22,7 +25,8 @@ key2_bin: .space 56         # alocates 56 bytes (8x7)
 
 # character info
 tank_position: .half 13, 209		    # (x, y) 
-tank_old_position: .half 0, 0		    # (x, y) used to have a reference to where to clean the screen
+#tank_old_position: .half 0, 0		    # (x, y) used to have a reference to where to clean the screen
+tank_old_position: .half 311, 231		    # (x, y) used to have a reference to where to clean the screen
 tank_dimensions: .byte 8, 8		      # (width, height)
 tank_clear_dimensions: .byte 8, 8 	# (width, height)
 tank_direction: .byte 0 		        # up = 0, down = 1, right = 2, left = 3
@@ -36,6 +40,17 @@ key1_direction: .byte 2       # right
 key2_position: .half 230, 16  # (x, y)
 key2_dimensions: .byte 8, 7   # (width, height)
 key2_direction: .byte 2       # right
+
+# fuel bar initially is maxed out and is shown as a 285 by 7 pixels area
+fuel: .half 285
+fuel_cooldown: .half 0
+
+lives: .byte 3
+life_address: .half 176, 314	# (x, y)
+life_dimensions: .byte 8, 6	# (width, height)
+
+score: .word 000000		# score that is shown (up to 5 decimal digits)
+# o programa da ruim se aparece qualquer digito diferente de 0 ou 1 na casa da unidade, entao vamo fazer com que so apareca 0 ou 1 la
 
 # ============================================================================================================
 
@@ -65,9 +80,15 @@ SETUP:
 	li a1, 0                # frame to print
 	call PRINT_MAP          # prints the stage
 	
+	li a0, 0		# frame to print
+	call PRINT_SCORE	# prints the current score
+	
 	la a0, stage1           # stage name
 	li a1, 1                # frame to print 
 	call PRINT_MAP          # prints the stage
+	
+	li a0, 1		# frame to print
+	call PRINT_SCORE	# prints the current score
 	
 # ============================================================================================================
 	
@@ -87,9 +108,23 @@ SETUP:
  	lb a4, 1(t1)
  	lb a5, tank_direction
  	mv a6, s0
-  call PRINT		# prints tank
+  	call PRINT		# prints tank
+  
+  # loads the info needed to print the fuel bar
+  	la t0, fuel
+  	lh a0, 0(t0)
+  	mv a1, s0
+  	call PRINT_FUEL
   	
-  li t0, 0xFF200604   # memory address responsible to keep switching frames
+  # changes and stores current fuel
+  	la t0, fuel
+  	lh a0, 0(t0)
+  	call MOD_FUEL
+  # updates the score
+  	mv a0, s0
+  	call PRINT_SCORE
+  	
+  	li t0, 0xFF200604   # memory address responsible to keep switching frames
  	sw s0, 0(t0)        # saves fresh printed frame on screen
 
   # loads all the info to call the print method to clean the current frame
@@ -172,6 +207,10 @@ CHECK_KEYPRESS:
 	beq t2, t3, RIGHT # se for "d" vai para direita
 	li t3, 'a'         
 	beq t2, t3, LEFT  # se for letra "a" vai para esquerda
+	li t3, 'p'
+	beq t2, t3, PONTO
+	li t3, 'f'
+	beq t2, t3, COMB
 	j FIM
 
 UP:	
@@ -181,7 +220,7 @@ UP:
 	sb t2, 0(t0)		      # saves 0 as direction val
 	
 	la t0, MATRIX1
-	la t1, location_matrix
+	la t1, matrix_location
 	lh t2, 0(t1)
 	add t3, t0, t2 		# address of the player from the matrix's beginning (sum of his stored position and the address of MATRIX1)
 	addi t4, t3, -36 	# calculates the address above the player (-36, because there are 36 elements in each row)
@@ -218,7 +257,7 @@ DOWN:
 	sb t2, 0(t0)		        # saves 1 as direction val
 	
 	la t0, MATRIX1
-	la t1, location_matrix
+	la t1, matrix_location
 	lh t2, 0(t1)
 	add t3, t0, t2 		# address of the player from the matrix's beginning (sum of his stored position and the address of MATRIX1)
 	addi t4, t3, 36 	# calculates the address below the player (+36, because there are 36 elements in each row)
@@ -255,7 +294,7 @@ RIGHT:
 	sb t2, 0(t0)		      # saves 2 as direction val
 	
 	la t0, MATRIX1
-	la t1, location_matrix
+	la t1, matrix_location
 	lh t2, 0(t1)
 	add t3, t0, t2 		# address of the player from the matrix's beginning (sum of his stored position and the address of MATRIX1)
 	addi t4, t3, 1 		# calculates the address to the right of the player (+1)
@@ -292,7 +331,7 @@ LEFT:
 	sb t2, 0(t0)		        # saves 3 as direction val
 	
 	la t0, MATRIX1
-	la t1, location_matrix
+	la t1, matrix_location
 	lh t2, 0(t1)
 	add t3, t0, t2 		# address of the player starting the matrix's beginning (sum of his stored position and the address MATRIX1)
 	addi t4, t3, -1 	# calculates the address to the left of the player (-1)
@@ -352,7 +391,7 @@ PRINT_MAP:
  
 # ---- ARGUMENTS ----
 # a0 = content to print
-# a1 = x postion
+# a1 = x position
 # a2 = y position
 # a3 = width
 # a4 = height
@@ -484,3 +523,279 @@ LEFT_LINE_LOOP:
 	blt t1, s3, LEFT_LOOP
 PRINT_END:
 	ret
+
+# ---- ARGUMENTS ----
+# a0 = fuel remaining (length)
+# a1 = frame to print on
+# the color of the fuel bar is always 3F, and it always has 7 pixels of height
+PRINT_FUEL:
+	li t0, 0xFF0 		# vga adress
+	add t0, t0, a1 		# selects the frame
+	slli t0, t0, 20	 	# adds the remaining 20 bits to the address
+	li t1, 0x00285	 	# the address of the top left corner of the fuel bar
+	add t0, t0, t1	 	# where to start printing
+	addi t5, t0, 285 	# last address of that line
+	mv t2, a0
+	add t2, t0, t2 		# pixel where the yellow line ends
+	li t3, 2240 		# can't do an addi with this number (7 lines)
+	add t3, t5, t3 		# the last address of the fuel area
+	li t1, 0x3F 		# color of the bar
+		
+FUEL_LOOP:
+	beqz a0, FUEL_LOOP2 	# special case where there is no fuel left and we don't want any yellow to be printed
+	sb t1, 0(t0) 		# paints that pixel yellow
+	addi t0, t0, 1 		# next pixel
+	blt t0, t2, FUEL_LOOP 	# if t0 < t2, do another loop
+FUEL_LOOP2:
+	li t4, 285
+	beq a0, t4, FUEL_NEXT 	# it misses a pixel when the player has max fuel, so we go aroud the problem
+	sb zero, 0(t0)		# since the color black is 0x00, we can use this register
+	addi t0, t0, 1 		# next pixel
+	blt t0, t5, FUEL_LOOP2	# if t0 < t5, repeat the loop to make the following pixels black
+FUEL_NEXT:
+	addi t2, t2, 320	# next line
+	addi t5, t5, 320
+	blt t3, t5, PRINT_END	# if the next line address is bigger than the end, stop_printing
+	addi t0, t0, 35		# returns to the beginning of the line (-285) and goes to the next line (+320)
+	j FUEL_LOOP
+
+# ---- ARGUMENTS ----
+# a0 = fuel remaining
+MOD_FUEL:
+	li t0, -1
+	beq a0, t0, DEATH		# if the fuel is already 0, don't change it (-1 because with 0 there's a pixel left on the screen
+	la t0, fuel_cooldown
+	lh t1, 0(t0)		# loads the stored cooldown
+	li t2, 1000
+	blt t1, t2, F_COOLDOWN	# if the stored cooldown is lower than 100, don't change the fuel
+	addi a0, a0, -1		# decreases fuel
+	sh zero, 0(t0)		# resets the cooldown
+	la t0, fuel
+  	sh a0, 0(t0) 		# stores the new fuel
+	ret
+
+F_COOLDOWN:
+	addi t1, t1, 1		# increases the cooldown timer
+	sh t1, 0(t0)		
+	ret
+
+DEATH:
+# clears where the player was
+	#frame 0
+	la t0, tank_position
+	la t1, tank_clear_dimensions
+	
+	la a0, tank_clear_bin
+	lh a1, 0(t0)
+	lh a2, 2(t0)
+	lb a3, 0(t1)
+	lb a4, 1(t1)
+	lb a5, tank_direction
+	li a6, 0
+	call PRINT
+	
+	#frame 1
+	la t0, tank_position
+	la t1, tank_clear_dimensions
+	
+	la a0, tank_clear_bin
+	lh a1, 0(t0)
+	lh a2, 2(t0)
+	lb a3, 0(t1)
+	lb a4, 1(t1)
+	lb a5, tank_direction
+	li a6, 1
+	call PRINT
+	
+# plays an explosion sound and stops the code during it
+	li a0,40		# define a nota
+	li a1,1500		# define a duração da nota em ms
+	li a2,127		# define o instrumento
+	li a3,127		# define o volume
+	li a7,33		# define o syscall
+	ecall			# toca a nota
+	li a0, 1500
+	li a7, 32
+	ecall			# realiza uma pausa de 1500 ms
+
+# resets values so that the player can restart the level (with the exception of keys)
+	la t0, tank_position
+	li t1, 13		# x position
+	li t2, 209		# y position
+	sh t1, 0(t0)
+	sh t2, 2(t0)
+	
+	la t0, tank_old_position
+	li t1, 311		# bottom left corner x position
+	li t2, 231		# bottom left corner y position
+	sh t1, 0(t0)
+	sh t2, 2(t0)
+	
+	la t0, tank_direction
+	sb zero, (t0)		# up 
+	
+	la t0, fuel
+	li t1, 285		# max fuel
+	sh t1, 0(t0)
+	
+	la t0, fuel_cooldown
+	sh zero, 0(t0)		# no cooldown
+	
+	# matrix position
+	la t0, MATRIX1
+	la t1, matrix_location
+	la t2, initial_matrix_location
+	
+	lh t3, 0(t1)
+	add t3, t3, t0		# address of the player in the matrix
+	sb zero, 0(t3)		# stores blank where the player was
+	
+	lh t3, 0(t2)
+	add t3, t3, t0		# address of the strating position in the matrix
+	li t4, 2
+	sb t4, 0(t3)
+	
+	lh t3, 0(t2)
+	sh t3, 0(t1)		# resets matrix_location
+	
+	
+# clears a tank symbol
+	# frame 0
+	la t0, life_address
+	la t1, life_dimensions
+	# la a0, endereço de um black tile novo, pq o tamanho desses tanques não eh 8x8
+	lh a1, 0(t0)
+	lh a2, 2(t0)
+	lb a3, 0(t1)
+	lb a4, 1(t1)
+	li a5, 0	# up, maybe?
+	li a6, 0	# provavelmente vai ter que fazer pros 2 frames
+	# call PRINT
+	
+	# frame 1
+	la t0, life_address
+	la t1, life_dimensions
+	# la a0, endereço de um black tile novo, pq o tamanho desses tanques não eh 8x8
+	lh a1, 0(t0)
+	lh a2, 2(t0)
+	lb a3, 0(t1)
+	lb a4, 1(t1)
+	li a5, 0	# up, maybe?
+	li a6, 1	# provavelmente vai ter que fazer pros 2 frames
+	# call PRINT
+	
+# subtracts 1 life
+	la t0, lives
+	lb t1, 0(t0)
+	addi t1, t1, -1
+	beqz t1, GAME_OVER	# if there are no lives left, reset everything
+	sb t1, 0(t0)
+# return
+	j GAME_LOOP
+
+GAME_OVER:
+# resets the number of lives
+	la t0, lives
+	li t1, 3
+	sb t1, 0(t0)
+
+# resets the position of the first life to be deleted
+	la t0, life_address
+	li t1, 176
+	li t2, 314
+	sh t1, 0(t0)
+	sh t2, 2(t0)
+	
+# resets the score
+	la t0, score
+	sw zero, 0(t0)
+
+# makes the game stop, so you contemplate why you lost (we can put a game over screen here)
+	li a0, 3500
+	li a7, 32
+	ecall
+# resets the map
+	j SETUP
+
+# ---- ARGUMENTS ----
+# a0 = frame to print
+PRINT_SCORE:
+	# the line to print, the color of the number, the frame and the syscall will all be the same in all syscalls
+	li a2, 233		# line
+	li a3, 0x000000ff	# 00 00 black white (00 00 background_color number_color)
+	mv a4, a0		# frame to print
+	li a7, 101		# syscall
+	
+	la t0, score
+	lw t0, 0(t0)
+	li t1, 1000000		# if its bigger than the max score
+	bge t0, t1, MOD_SCORE
+	
+	li t1, 100000		# 6 digit number
+	li t2, 86		# column
+	bge t0, t1, SHOW_SCORE
+	
+	li a0, 0		# prints a 0 before the number
+	li a1, 86		
+	ecall
+	
+	li t1, 10000		# 5 digit number
+	li t2, 94		# last column + 8
+	bge t0, t1, SHOW_SCORE
+	
+	li a0, 0
+	li a1, 94
+	ecall
+	
+	li t1, 1000		# 4 digit number
+	li t2, 102		# last column + 8
+	bge t0, t1, SHOW_SCORE
+	
+	li a0, 0
+	li a1, 102
+	ecall
+	
+	li t1, 100		# 3 digit number
+	li t2, 110		# last column + 8
+	bge t0, t1, SHOW_SCORE
+	
+	li a0, 0
+	li a1, 110
+	ecall
+	
+	li t2, 118		# 2 digit number, there won't be a score of 1 digit
+	j SHOW_SCORE
+	
+MOD_SCORE:
+	li a0, 999999		# max score
+	li a1, 86		# column
+	ecall
+	ret
+
+SHOW_SCORE:
+	mv a0, t0
+	mv a1, t2
+	ecall
+	ret
+
+COMB:
+	la t0, fuel
+	lh t1, 0(t0)
+	li t2, 285
+	addi t1, t1, 5
+	bgt t1, t2, COMB_MAX
+	sh t1, 0(t0)
+	ret
+
+COMB_MAX:
+	sh t2, 0(t0)
+	ret
+
+PONTO:
+	la t0, score
+	lw t1, 0(t0)
+	addi t1, t1, 500
+	sw t1, 0(t0)
+	ret
+
+.include "SYSTEMv21.s"
