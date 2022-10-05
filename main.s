@@ -385,7 +385,7 @@ j game.LOOP
   call MOD_FUEL
 
   # checks if a new note from the music should be played and plays it if needed
-#  call music.NOTE
+  call music.NOTE
   	
   li t0, 0xFF200604   # memory address responsible to keep switching frames
  	sw s0, 0(t0)        # saves fresh printed frame on screen
