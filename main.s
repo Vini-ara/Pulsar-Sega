@@ -9,6 +9,7 @@ tank_clear: .string "blackTile/TankBlackTile.bin"
 tank:       .string "tank/tank.bin"
 tankRed:    .string "tankRed/redTank.bin"
 tankYellow: .string "tankYellow/yellowTank.bin"
+bullet:	    .string ""
 key1:       .string "key1/key1.bin" 
 key2:       .string "key2/key2.bin"
 key_clear:  .string "keyClear/keyClear.bin"
@@ -21,6 +22,7 @@ game.tank_bin:        .space 64         # alocates 64 bytes (8x8)
 game.tankRed_bin:     .space 64
 game.tankYellow_bin:     .space 64
 game.tank_clear_bin:  .space 64   # alocates 64 bytes (8x8)
+game.bullet_bin:      .space 64
 game.key1_bin:        .space 64         # alocates 64 bytes (8x8)
 game.key2_bin:        .space 64         # alocates 64 bytes (8x8)
 game.key_clear:       .space 64         # alocates 64 bytes (8x8)
@@ -31,6 +33,7 @@ game.gate_clear:       .space 184       # alocates 184 bytes (23x8)
 # game constants
 game.initial_matrix_location: .half 865 # usado quando o player morrer
 game.matrix_location: .half 865 # usado pra verificar os espa�os em volta
+game.matrix_bullet: .half 0
 
 game.isrunnig: .byte 1 # defines when the game loop stops
 game.stage: .byte 1 # current stage
@@ -39,7 +42,7 @@ game.stage: .byte 1 # current stage
 game.fuel: .half 285
 game.fuel_cooldown: .half 0
 game.lives: .byte 3
-game.life_address: .half 176, 314	# (x, y)
+game.life_address: .half 175, 234	# (x, y)
 game.life_dimensions: .byte 8, 6	# (width, height)
 
 # o programa da ruim se aparece qualquer digito diferente de 0 ou 1 na casa da unidade, entao vamo fazer com que so apareca 0 ou 1 la
@@ -70,6 +73,13 @@ stage1.key2_direction: .byte 2
 #stage1.key2_position: .half 230, 16  # (x, y)
 #stage1.key2_dimensions: .byte 8, 7   # (width, height)
 #stage1.key2_direction: .byte 2       # right
+
+game.bullet_position: .half 13, 209		# (x, y) 
+game.bullet_old_position: .half 311, 231	# (x, y) used to have a reference to where to clean the screen
+game.bullet_dimensions: .byte 8, 8		# (width, height) a gente pode fazer 8x8 ou fazer um menor, vai depender do tamanho da sprite
+game.bullet_direction: .byte 0 		        # up = 0, down = 1, right = 2, left = 3
+game.bullet_duration: .half 1000
+game.player_bullet_isthere: .byte 0		# 0 = bullet is dead, 1 = is alive, can't spawn another one
 
 music.num: .word 121
 # note0, duration_bote0, note1, ... 
@@ -230,6 +240,13 @@ print_tank:
  	mv a6, s0
   call PRINT		# prints tank
   
+  # checks if we can already move the bullet
+  	la t0, game.bullet_duration
+  	lh t1, 0(t0)
+  	beqz t1, MOVE_BULLET
+  	addi t1, t1, -1
+  	sh t1, 0(t0)
+  return:
   # loads the info needed to print the fuel bar
   la t0, game.fuel
   lh a0, 0(t0)
@@ -318,6 +335,8 @@ CHECK_KEYPRESS:
 	beq t2, t3, PONTO
 	li t3, 'f'
 	beq t2, t3, COMB
+	li t3, ' '
+	beq t2, t3, FIRE
 	j FIM
 
 UP:	
@@ -487,6 +506,58 @@ LEFT:
 	j FIM 
 
 FIM: 	ret
+
+FIRE:	lb t0, game.player_bullet_isthere
+	bnez t0, FIM			# if there is already a player bullet on screen, don't make another one
+	lb t0, game.tank_direction	# loads tank direction to determine in which direction the bullet will travel
+	li t1, 0
+	beq t0, t1, FIRE_UP
+	li t1, 1
+	#beq t0, t1, FIRE_DOWN
+	li t1, 2
+	#beq t0, t1, FIRE_RIGHT
+	li t1, 3
+	#beq t0, t1, FIRE_LEFT
+FIRE_UP:
+	la t0, game.player_bullet_isthere
+	li t1, 1
+	sb t1, 0(t0)		# stores that there is already a bullet on screen
+	la t0, game.bullet_direction
+	sb zero, 0(t0)		# stores the direction as up
+	la t0, game.matrix_location
+	lh t0, 0(t0)
+	addi t0, t0, -36	# location in the matrix above the player
+	la t1, MATRIX1
+	add t1, t1, t0
+	lb t2, 0(t1)		# checks if we can spawn a bullet there
+	li t3, 1
+	beq t2, t3, FIM		# wall?
+	li t3, 3
+	beq t2, t3, FIM		# key?
+	li t3, 4
+	beq t2, t3, FIM		# key?
+	li t3, 5
+	beq t2, t3, FIM		# gate?
+	li t3, 6
+	beq t2, t3, FIM		# gate?
+	li t3, 7
+	sb t3, 0(t1)		# stores a bullet in that position
+	la t1, game.matrix_bullet
+	sh t0, 0(t1)		# stores the relative position of the bullet within the matrix     
+	# the bullet position will be 8 pixels above the player (assuming a 8x8 bullet sprite)
+	la t0, game.tank_position
+	lh t1, 0(t0)		# x position
+	lh t2, 2(t0)		# y position
+	addi t2, t2, -8		# up one line
+	la t0, game.bullet_position
+	sh t1, 0(t0)
+	sh t2, 2(t0)
+	ret
+
+MOVE_BULLET:
+	
+	call PRINT
+	j return
 
 # ---- ARGUMENTS ----
 # a0 = file name addr
@@ -704,6 +775,7 @@ F_COOLDOWN:
 	ret
 
 DEATH:
+# keyyyyy
 # clears where the player was
 	#frame 0
 	la t0, game.tank_position
@@ -799,7 +871,6 @@ DEATH:
 	# frame 1
 	la t0, game.life_address
 	la t1, game.life_dimensions
-	# la a0, endere�o de um black tile novo, pq o tamanho desses tanques n�o eh 8x8
 	la a0, game.tank_clear_bin
 	lh a1, 0(t0)
 	lh a2, 2(t0)
@@ -808,6 +879,12 @@ DEATH:
 	li a5, 0	# up, maybe?
 	li a6, 1	# provavelmente vai ter que fazer pros 2 frames
 	call PRINT
+	
+# modifies the position of the life symbol to be deleted
+	la t0, game.life_address
+	lh t1, 0(t0)		# we only need to modify the X coordinate
+	addi t1, t1, -11	# distance to the top left corner of the next life
+	sh t1, 0(t0)
 	
 # subtracts 1 life
 	la t0, game.lives
@@ -829,8 +906,8 @@ GAME_OVER:
 
 # resets the position of the first life to be deleted
 	la t0, game.life_address
-	li t1, 176
-	li t2, 314
+	li t1, 175
+	li t2, 234
 	sh t1, 0(t0)
 	sh t2, 2(t0)
 	
