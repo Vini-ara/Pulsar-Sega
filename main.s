@@ -1921,7 +1921,7 @@ music.PLAY:
   	lhu a1, 0(t4)		# duration
   	
   # setting up the rest of the parameters of the syscall
-  	li a2, 120		# instrument
+  	li a2, 118		# instrument
   	li a3, 127		# volume 
   	li a7, 31		# MIDI Out Syscall
   	ecall
