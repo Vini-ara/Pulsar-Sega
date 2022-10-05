@@ -76,6 +76,14 @@ stage1.key2_position: .half 117, 17
 stage1.key1_position:
 stage1.key2_postion: 
 
+music.num: .word 121
+# note0, duration_bote0, note1, ... 
+music.note_and_duration: .half 67,353,60,353,64,176,65,176,67,353,60,353,64,176,65,176,67,353,60,353,64,176,65,176,67,353,60,353,64,176,65,176,67,353,60,353,64,176,65,176,67,353,60,353,64,176,65,176,67,353,60,353,64,176,65,176,67,353,60,353,64,176,65,176,55,1059,48,1059,52,176,53,176,55,706,48,706,52,176,53,176,50,353,55,353,59,176,60,176,62,353,55,353,59,176,60,176,62,353,55,353,59,176,60,176,62,353,55,353,59,353,53,1059,47,1059,52,176,50,176,53,706,47,1059,52,176,50,176,48,353,57,176,59,176,60,353,53,353,57,176,59,176,60,353,53,353,57,176,59,176,60,353,53,353,57,353,55,1059,48,1059,52,176,53,176,55,706,48,706,52,176,53,176,50,353,55,353,59,176,60,176,62,353,55,353,59,176,60,176,62,353,55,353,59,176,60,176,62,353,55,353,59,353,53,1059,47,1059,52,176,50,176,53,706,47,1059,52,176,50,176,48,706,60,353,55,353,57,176,59,176,60,353,55,353,57,176,59,176,60,353,55,353,57,176,59,176
+music.initial_time: .word 0 		# stores the time when the current note was played
+music.counter: .half 0, 1		# used to find which note should be played next
+music.note_counter: .word 0
+music.current_duration: .half 0
+
 # ============================================================================================================
 
 .text
@@ -242,9 +250,9 @@ j game.LOOP
   la t0, game.fuel
   lh a0, 0(t0)
   call MOD_FUEL
-  # updates the score
-  mv a0, s0
-  call PRINT_SCORE
+
+  # checks if a new note from the music should be played and plays it if needed
+  call music.NOTE
   	
   li t0, 0xFF200604   # memory address responsible to keep switching frames
  	sw s0, 0(t0)        # saves fresh printed frame on screen
@@ -825,6 +833,9 @@ GAME_OVER:
 	la t0, game.lives
 	li t1, 3
 	sb t1, 0(t0)
+	
+# resets the song
+	call music.RESET
 
 # resets the position of the first life to be deleted
 	la t0, game.life_address
@@ -994,6 +1005,15 @@ game.KEY1_COMPLETION:
   la t0, game.need_render
   li t1, 1
   sb t1, 0(t0)
+  
+  la t0, game.score
+  lw t1, 0(t0)
+  addi t1, t1, 50
+  sw t1, 0(t0)
+  li a0, 0
+  call PRINT_SCORE
+  li a0, 1
+  call PRINT_SCORE
 
   j game.LOOP
 
@@ -1014,6 +1034,15 @@ game.KEY2_COMPLETION:
   la t0, game.need_render
   li t1, 1
   sb t1, 0(t0)
+  
+  la t0, game.score
+  lw t1, 0(t0)
+  addi t1, t1, 50
+  sw t1, 0(t0)
+  li a0, 0
+  call PRINT_SCORE
+  li a0, 1
+  call PRINT_SCORE
 
   j game.LOOP
   
@@ -1324,5 +1353,85 @@ stage1.COMPLETION:
 
   j game.LOOP
 
+music.NOTE:
+  # gets the duration of the current note
+  	la t1, music.current_duration
+  	lhu t1, 0(t1)
+  # gets the current time to compare with the initial time
+  	li a7, 30
+  	ecall					# a0 = low order 32 bits of the current time in milliseconds since 1 January 1970
+
+  	la t0, music.initial_time		# low order 32 bits of the time when the current note started playing
+  	lw t0, 0(t0)
+
+  # gets the difference between the stored time and the current time and check it that's greater than the duration
+  	sub t0, a0, t0
+
+  # in case there was a rare exception in which that difference is zero, play the note anyway to keep the music playing
+ 	blt t0, zero, music.PLAY
+
+  # now check if that difference is equal or greater than the note duration
+  	bge t0, t1, music.PLAY
+
+	ret		# if not, just go back
+
+music.PLAY:
+  # gets the current time and stores it in memory
+	li a7, 30
+	ecall
+	la t0, music.initial_time
+	sw a0, 0(t0)
+  # gets the next note and duration in memory
+  	la t0, music.counter
+  	lhu t1, 0(t0)
+  	lhu t2, 2(t0)
+  	slli t1, t1, 1		# multiplies by 2 because we are dealing with halfword addresses
+  	slli t2, t2, 1
+  	la t3, music.note_and_duration
+  	add t4, t3, t2		# duration address
+  	add t3, t3, t1		# note address
+  	lhu a0, 0(t3)		# note
+  	lhu a1, 0(t4)		# duration
+  	
+  # setting up the rest of the parameters of the syscall
+  	li a2, 120		# instrument
+  	li a3, 127		# volume 
+  	li a7, 31		# MIDI Out Syscall
+  	ecall
+  	
+  # stores new duration and counters in memory
+  	srli t1, t1, 1		# restores the original form of the note counters
+  	srli t2, t2, 1
+  	addi t1, t1, 1		# goes to next note and duration
+  	addi t2, t2, 1 
+  	sh t1, 0(t0)
+  	sh t2, 2(t0)
+  	
+  	la t0, music.current_duration
+  	sh a1, 0(t0)		# stores the duration of the current note
+  	
+  	la t0, music.note_counter
+  	lw t0, 0(t0)
+  	addi t0, t0, 1		# number of notes that have been played
+  	la t1, music.num
+  	lw t1, 0(t1)		# total number of notes
+  	
+  	bgt t0, t1, music.RESET	# if the number of notes played is bigger than what is avilable, reset
+  	
+  	la t1, music.note_counter
+  	sw t0, 0(t1)
+  	
+  	ret
+  	
+music.RESET:
+	la t0, music.note_counter
+	sw zero, 0(t0)
+	
+	la t0, music.counter
+	li t1, 1
+	sh zero, 0(t0)
+	sh t1, 2(t0)
+	
+	ret
 
 .include "SYSTEMv21.s"
