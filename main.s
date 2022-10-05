@@ -5,6 +5,7 @@
 .include "matriz_mapa2.data"
 
 # sprites filePaths relative to this file
+menu:       .string "menu/menu.bin"
 stage1:     .string "stage1/stage1.bin"
 stage2:     .string "stage2/stage2.bin"
 tank_clear: .string "blackTile/TankBlackTile.bin"
@@ -67,7 +68,7 @@ game.need_render: .byte 0
 
 game.gate_dimensions: .byte 23, 8 # (width, height)
 game.gate1_position: .half 285, 184 
-game.gate2_position: .half 285, 176
+game.gate2_position: .half 285, 177
 game.whiteGateClear_dimensions: .byte 6, 25
 game.whiteGate_position: .half 286, 192
 
@@ -153,10 +154,26 @@ game.SETUP:
   la s1, game.whiteGateClear
   call OPEN_FILE
 
-  lb t0, game.stage
-  li t1, 1
-  beq t0, t1, stage1.SETUP
-# beq t0, 2, stage2.SETUP
+  la a0, menu
+  li a1, 0
+  call PRINT_MAP
+
+  la a0, menu
+  li a1, 1
+  call PRINT_MAP
+
+  menu.loop:
+	  li t1, 0xFF200000		  # carrega o endere�o de controle do KDMMIO
+	  lw t0, 0(t1)			    # Le bit de Controle Teclado
+	  andi t0, t0, 0x0001		# mascara o bit menos significativo
+
+    beq t0, zero, FIM 	  # Se n�o h� tecla pressionada ent�o vai para FIM
+    lw t2, 4(t1)  			  # le o valor da tecla tecla
+
+    li t3, 'j' 
+    bne t2, t3, menu.loop
+  
+  j stage1.SETUP
 
 stage1.SETUP:
 	la a0, stage1           # stage name
@@ -937,7 +954,18 @@ DEATH:
 	sh zero, 0(t0)		# no cooldown
 	
 	# matrix position
-	la t0, MATRIX1
+  la t0, game.stage
+  li t1, 1
+  beq t1, t0, DEATH.matrix1
+  la t0, MATRIX2
+
+  j DEATH.continue
+  
+  DEATH.matrix1:
+    la t0, MATRIX1
+
+  DEATH.continue:
+
 	la t1, game.matrix_location
 	la t2, game.initial_matrix_location
 	
@@ -952,7 +980,6 @@ DEATH:
 	
 	lh t3, 0(t2)
 	sh t3, 0(t1)		# resets matrix_location
-	
 	
 # clears a tank symbol
 	# frame 0
@@ -989,13 +1016,12 @@ DEATH:
 	la t0, game.lives
 	lb t1, 0(t0)
 	addi t1, t1, -1
-	beqz t1, GAME_OVER	# if there are no lives left, reset everything
+	beqz t1, game.GAME_OVER	# if there are no lives left, reset everything
 	sb t1, 0(t0)
 # return
 	j game.LOOP
 
-GAME_OVER:
-# resets the number of lives
+game.RESET:
 	la t0, game.lives
 	li t1, 3
 	sb t1, 0(t0)
@@ -1014,12 +1040,44 @@ GAME_OVER:
 	la t0, game.score
 	sw zero, 0(t0)
 
+  la t0, game.key1_complete
+  li t1, 0
+  sb t1, 0(t0)
+
+  la t0, game.key2_complete
+  sb t1, 0(t0) 
+
+  la t0, game.key1_active
+  sb t1, 0(t0)
+  la t0, game.key2_active
+  sb t1, 0(t0)
+
+  la t0, game.tank_position
+  li t1, 13
+  sh t1, 0(t0)
+  li t1, 209
+  sh t1, 2(t0)
+  
+  la t0, game.tank_direction
+  sb zero, 0(t0)
+
+  lh t0, game.initial_matrix_location
+  la t1, game.matrix_location
+  sh t0, 0(t1)
+
+  la t0, game.stage
+  li t1, 1
+  sb t1, 0(t0)
+
+	j game.SETUP
+
+game.GAME_OVER:
 # makes the game stop, so you contemplate why you lost (we can put a game over screen here)
 	li a0, 3500
 	li a7, 32
 	ecall
-# resets the map
-	j game.SETUP
+
+  j game.RESET
 
 # ---- ARGUMENTS ----
 # a0 = frame to print
@@ -1321,10 +1379,6 @@ game.RE_RENDER_STAGE1:
     li t1, 0
     sb t1, 0(t0)
 
-    li t1, 1
-    lb t0, game.key2_complete
-    beq t0, t1, game.RE_RENDER1.key2_completion
-
     j game.RE_RENDER1.end
 
   game.RE_RENDER1.key2_activation:
@@ -1411,15 +1465,15 @@ game.RE_RENDER_STAGE1:
     lh t1, 0(t0) 
     addi t1, t1, 50
     li t2, 285
-    bgt t1, t2, game.RE_RENDER1.max_fuel
+    bgt t1, t2, game.RE_RENDER1.max_fuel1
 
     sh t1, 0(t0)
-    j game.RE_RENDER1.normal      
+    j game.RE_RENDER1.normal1      
 
-    game.RE_RENDER1.max_fuel:
+    game.RE_RENDER1.max_fuel1:
     sh t2, 0(t0)
 
-    game.RE_RENDER1.normal:
+    game.RE_RENDER1.normal1:
       la t0, game.need_render
       li t1, 0
       sb t1, 0(t0)
@@ -1427,14 +1481,14 @@ game.RE_RENDER_STAGE1:
   game.RE_RENDER1.end:
     li t1, 1  
     lb t0, game.key1_complete
-    bne t0, t1, keep_going
+    bne t0, t1, game.RE_RENDER1.keep_going
 
     lb t0, game.key2_complete
-    bne t0, t1, keep_going
+    bne t0, t1, game.RE_RENDER1.keep_going
 
-    j stage1.COMPLETION
+    call game.clear_all_gates
     
-    keep_going:
+    game.RE_RENDER1.keep_going:
     j game.LOOP
 
 game.RE_RENDER_STAGE2:
@@ -1636,23 +1690,92 @@ game.RE_RENDER_STAGE2:
     lh t1, 0(t0) 
     addi t1, t1, 50
     li t2, 285
-    bgt t1, t2, game.RE_RENDER2.max_fuel
+    bgt t1, t2, game.RE_RENDER2.max_fuel1
 
     sh t1, 0(t0)
-    j game.RE_RENDER2.normal      
+    j game.RE_RENDER2.normal1      
 
-    game.RE_RENDER2.max_fuel:
-    sh t2, 0(t0)
+    game.RE_RENDER2.max_fuel1:
+    sh t2, 0(t0) 
 
-    game.RE_RENDER2.normal:
+    game.RE_RENDER2.normal1:
       la t0, game.need_render
       li t1, 0
       sb t1, 0(t0)
     
   game.RE_RENDER2.end:
+    li t1, 1  
+    lb t0, game.key1_complete
+    bne t0, t1, game.RE_RENDER2.keep_going
+
+    lb t0, game.key2_complete
+    bne t0, t1, game.RE_RENDER2.keep_going
+
+    call game.clear_all_gates
+    
+    game.RE_RENDER2.keep_going:
     j game.LOOP
 
-stage1.COMPLETION:
+game.clear_all_gates:
+    la t0, game.gate1_position
+    la t1, game.gate_dimensions
+
+    la a0, game.gate_clear  
+    lh a1, 0(t0) 
+    addi a1, a1, -16
+    lh a2, 2(t0)
+    lb a3, 0(t1)
+    lb a4, 1(t1)
+    li a5, 0
+    li a6, 0
+    call PRINT 
+
+    li a6, 1
+    call PRINT
+
+    la t0, game.gate2_position
+    la a0, game.gate_clear  
+    lh a2, 2(t0)
+    li a6, 0
+    call PRINT 
+
+    li a6, 1
+    call PRINT
+
+    la t0, game.gate2_position
+    la t1, game.key_dimensions
+    la a0, game.key_clear
+    lh a1, 0(t0)
+    lh a2, 2(t0)
+    lb a3, 0(t1)
+    lb a4, 1(t1)
+    li a5, 2
+    li a6, 0
+    call PRINT 
+
+    li a6, 1 
+    call PRINT
+
+    la t0, game.gate1_position
+    lh a1, 0(t0) 
+    lh a2, 2(t0)
+    li a5, 2
+    li a6, 0
+    call PRINT 
+
+    li a6, 1
+    call PRINT
+
+    li t1, 1
+    lb t0, game.stage
+    beq t0, t1, game.clear_all_gates.jump1
+
+    j stage2.COMPLETION
+
+    game.clear_all_gates.jump1:
+      j stage1.COMPLETION
+
+game.stage_completion_animation:
   la t0, game.whiteGate_position
   la t1, game.whiteGateClear_dimensions
 
@@ -1730,11 +1853,32 @@ stage1.COMPLETION:
 	li a7, 32
 	ecall			# realiza uma pausa de 1500 ms
 
+  li t1, 1
+  lb t0, game.stage
+  beq t0, t1, game.stage_completion_animation.jump1
+
+  j stage2.COMPLETION.continuation
+
+  game.stage_completion_animation.jump1:
+    j stage1.COMPLETION.continuation
+  ret
+
+stage1.COMPLETION:
+  call game.stage_completion_animation
+
+  stage1.COMPLETION.continuation:
   li t0, 2
   la t1, game.stage
   sb t0, 0(t1)
 
   j stage2.SETUP
+
+stage2.COMPLETION:
+  call game.stage_completion_animation
+
+  stage2.COMPLETION.continuation:
+  
+  j game.RESET
 
 music.NOTE:
   # gets the duration of the current note
