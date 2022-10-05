@@ -2,35 +2,43 @@
 .include "MACROSv21.s"
 # vazio = 0, parede = 1, player = 2, chave = 3
 .include "matriz_mapa1.data"
+.include "matriz_mapa2.data"
 
 # sprites filePaths relative to this file
+menu:       .string "menu/menu.bin"
 stage1:     .string "stage1/stage1.bin"
+stage2:     .string "stage2/stage2.bin"
 tank_clear: .string "blackTile/TankBlackTile.bin"
 tank:       .string "tank/tank.bin"
 tankRed:    .string "tankRed/redTank.bin"
 tankYellow: .string "tankYellow/yellowTank.bin"
+bullet:	    .string ""
 key1:       .string "key1/key1.bin" 
 key2:       .string "key2/key2.bin"
 key_clear:  .string "keyClear/keyClear.bin"
 gate1:      .string "gate1/gate1.bin"
 gate2:      .string "gate2/gate2.bin"
 gate_clear: .string "gateClear/gateClear.bin"
+whiteGate_clear: .string "whiteGate/whiteGateClear.bin"
 
 # sprites data
 game.tank_bin:        .space 64         # alocates 64 bytes (8x8)
 game.tankRed_bin:     .space 64
 game.tankYellow_bin:     .space 64
 game.tank_clear_bin:  .space 64   # alocates 64 bytes (8x8)
+game.bullet_bin:      .space 64
 game.key1_bin:        .space 64         # alocates 64 bytes (8x8)
 game.key2_bin:        .space 64         # alocates 64 bytes (8x8)
 game.key_clear:       .space 64         # alocates 64 bytes (8x8)
 game.gate1_bin:       .space 184        # alocates 184 bytes (23x8)
 game.gate2_bin:       .space 184        # alocates 184 bytes (23x8)
 game.gate_clear:       .space 184       # alocates 184 bytes (23x8)
+game.whiteGateClear:  .space 150  
 
 # game constants
 game.initial_matrix_location: .half 865 # usado quando o player morrer
 game.matrix_location: .half 865 # usado pra verificar os espa�os em volta
+game.matrix_bullet: .half 0
 
 game.isrunnig: .byte 1 # defines when the game loop stops
 game.stage: .byte 1 # current stage
@@ -39,19 +47,19 @@ game.stage: .byte 1 # current stage
 game.fuel: .half 285
 game.fuel_cooldown: .half 0
 game.lives: .byte 3
-game.life_address: .half 176, 314	# (x, y)
+game.life_address: .half 175, 234	# (x, y)
 game.life_dimensions: .byte 8, 6	# (width, height)
 
-# o programa da ruim se aparece qualquer digito diferente de 0 ou 1 na casa da unidade, entao vamo fazer com que so apareca 0 ou 1 la
 game.score: .word 000000		# score that is shown (up to 5 decimal digits)
-# character info
 
+# character info
 game.tank_position: .half 13, 209		    # (x, y) 
 game.tank_old_position: .half 311, 231		    # (x, y) used to have a reference to where to clean the screen
 game.tank_dimensions: .byte 8, 8		      # (width, height)
 game.tank_direction: .byte 0 		        # up = 0, down = 1, right = 2, left = 3
 
 game.key_dimensions: .byte 8, 8   # (width, height)
+game.key_direction: .byte 2
 game.key1_active: .byte 0
 game.key1_complete: .byte 0
 game.key2_active: .byte 0
@@ -60,16 +68,24 @@ game.need_render: .byte 0
 
 game.gate_dimensions: .byte 23, 8 # (width, height)
 game.gate1_position: .half 285, 184 
-game.gate2_position: .half 285, 176
+game.gate2_position: .half 285, 177
+game.whiteGateClear_dimensions: .byte 6, 25
+game.whiteGate_position: .half 286, 192
+
 # stage 1
 stage1.key1_position: .half 213, 17  # (x, y)
-stage1.key1_direction: .byte 2       # right
 stage1.key2_position: .half 117, 17
-stage1.key2_direction: .byte 2
 
-#stage1.key2_position: .half 230, 16  # (x, y)
-#stage1.key2_dimensions: .byte 8, 7   # (width, height)
-#stage1.key2_direction: .byte 2       # right
+# stage 2 
+stage2.key1_position:  .half 150, 17
+stage2.key2_position: .half 21, 17
+
+game.bullet_position: .half 13, 209		# (x, y) 
+game.bullet_old_position: .half 311, 231	# (x, y) used to have a reference to where to clean the screen
+game.bullet_dimensions: .byte 8, 8		# (width, height) a gente pode fazer 8x8 ou fazer um menor, vai depender do tamanho da sprite
+game.bullet_direction: .byte 0 		        # up = 0, down = 1, right = 2, left = 3
+game.bullet_duration: .half 1000
+game.player_bullet_isthere: .byte 0		# 0 = bullet is dead, 1 = is alive, can't spawn another one
 
 music.num: .word 121
 # note0, duration_bote0, note1, ... 
@@ -133,10 +149,31 @@ game.SETUP:
   la s1, game.gate_clear
   call OPEN_FILE
 
-  lb t0, game.stage
-  li t1, 1
-  beq t0, t1, stage1.SETUP
-# beq t0, 2, stage2.SETUP
+  la a0, whiteGate_clear
+  la t0, game.whiteGateClear_dimensions
+  la s1, game.whiteGateClear
+  call OPEN_FILE
+
+  la a0, menu
+  li a1, 0
+  call PRINT_MAP
+
+  la a0, menu
+  li a1, 1
+  call PRINT_MAP
+
+  menu.loop:
+	  li t1, 0xFF200000		  # carrega o endere�o de controle do KDMMIO
+	  lw t0, 0(t1)			    # Le bit de Controle Teclado
+	  andi t0, t0, 0x0001		# mascara o bit menos significativo
+
+    beq t0, zero, FIM 	  # Se n�o h� tecla pressionada ent�o vai para FIM
+    lw t2, 4(t1)  			  # le o valor da tecla tecla
+
+    li t3, 'j' 
+    bne t2, t3, menu.loop
+  
+  j stage1.SETUP
 
 stage1.SETUP:
 	la a0, stage1           # stage name
@@ -161,7 +198,7 @@ stage1.SETUP:
 	lh a2, 2(t0)
 	lb a3, 0(t1)
 	lb a4, 1(t1)
-	lb a5, stage1.key1_direction
+	lb a5, game.key_direction
   li a6, 1
 	call PRINT
 
@@ -176,30 +213,116 @@ stage1.SETUP:
 	lh a2, 2(t0)
 	lb a3, 0(t1)
 	lb a4, 1(t1)
-	lb a5, stage1.key2_direction
+	lb a5, game.key_direction
   li a6, 1
 	call PRINT
 
   li a6, 0
 	call PRINT
 
-j game.LOOP
+  j game.LOOP
 	
+stage2.SETUP:
+	la a0, stage2           # stage name
+	li a1, 0                # frame to print
+	call PRINT_MAP          # prints the stage
+	
+	li a0, 0		# frame to print
+	call PRINT_SCORE	# prints the current score
+	
+	la a0, stage2           # stage name
+	li a1, 1                # frame to print 
+	call PRINT_MAP          # prints the stage
+	
+	li a0, 1		# frame to print
+	call PRINT_SCORE	# prints the current score
+
+	la t0, stage2.key1_position
+	la t1, game.key_dimensions
+	
+	la a0, game.key1_bin
+	lh a1, 0(t0)
+	lh a2, 2(t0)
+	lb a3, 0(t1)
+	lb a4, 1(t1)
+	lb a5, game.key_direction
+  li a6, 1
+	call PRINT
+
+  li a6, 0
+	call PRINT
+
+	la t0, stage2.key2_position
+	la t1, game.key_dimensions
+	
+	la a0, game.key2_bin
+	lh a1, 0(t0)
+	lh a2, 2(t0)
+	lb a3, 0(t1)
+	lb a4, 1(t1)
+	lb a5, game.key_direction
+  li a6, 1
+	call PRINT
+
+  li a6, 0
+	call PRINT
+
+  la t0, game.tank_position
+  li t1, 13
+  sh t1, 0(t0)
+  li t1, 209
+  sh t1, 2(t0)
+
+  la t0, game.fuel 
+  li t1, 285
+  sh t1, 0(t0)
+
+  li t1, 0
+  la t0, game.key1_complete
+  sb t1, 0(t0)
+
+  la t0, game.key2_complete
+  sb t1, 0(t0)
+
+  la t0, game.matrix_location
+  lh t1, game.initial_matrix_location
+  sh t1, 0(t0)
+
+j game.LOOP
 # ============================================================================================================
 	
  game.LOOP:
 	xori s0, s0, 1        # alternates frame
+
+  lb t0, game.stage
+  li t1, 1
+  beq t0, t1, stage1Logic
+  
+  la a0, MATRIX2
+  call CHECK_KEYPRESS
+  j check_render
+
+  stage1Logic:
+  la a0, MATRIX1
  	call CHECK_KEYPRESS   # does the keyboard check logic
+
+  check_render:
 
   li t0, 1
   lb t1, game.need_render
   beq t1, t0, re_render
   j no_re_render
 
-re_render:
-  j game.RE_RENDER_STAGE
+  re_render:
+  lb t0, game.stage
+  li t1, 1
+  beq t0, t1, re_render_s1
+  j game.RE_RENDER_STAGE2
 
-no_re_render:
+  re_render_s1:
+  j game.RE_RENDER_STAGE1
+
+  no_re_render:
 
   # loads all the info to call the print method and print the tank on screen	
  	la t0, game.tank_position        
@@ -214,14 +337,14 @@ no_re_render:
  	la a0, game.tank_bin
   j print_tank
 
-print_red_tank: 
+  print_red_tank: 
   la a0, game.tankRed_bin
   j print_tank
 
-print_yellow_tank:
+  print_yellow_tank:
   la a0, game.tankYellow_bin
 
-print_tank:
+  print_tank:
  	lh a1, 0(t0)
  	lh a2, 2(t0)
  	lb a3, 0(t1)
@@ -229,23 +352,6 @@ print_tank:
  	lb a5, game.tank_direction
  	mv a6, s0
   call PRINT		# prints tank
-  
-  # loads the info needed to print the fuel bar
-  la t0, game.fuel
-  lh a0, 0(t0)
-  mv a1, s0
-  call PRINT_FUEL
-  	
-  # changes and stores current fuel
-  la t0, game.fuel
-  lh a0, 0(t0)
-  call MOD_FUEL
-
-  # checks if a new note from the music should be played and plays it if needed
-  call music.NOTE
-  	
-  li t0, 0xFF200604   # memory address responsible to keep switching frames
- 	sw s0, 0(t0)        # saves fresh printed frame on screen
 
   # loads all the info to call the print method to clean the current frame
 	la t0, game.tank_old_position 
@@ -259,6 +365,31 @@ print_tank:
 	lb a5, game.tank_direction
 	mv a6, s0
 	call PRINT   # clears the screen
+  
+  # checks if we can already move the bullet
+  	la t0, game.bullet_duration
+  	lh t1, 0(t0)
+  	beqz t1, MOVE_BULLET
+  	addi t1, t1, -1
+  	sh t1, 0(t0)
+  return:
+  # loads the info needed to print the fuel bar
+  la t0, game.fuel
+  lh a0, 0(t0)
+  mv a1, s0
+  call PRINT_FUEL
+  	
+  # changes and stores current fuel
+  la t0, game.fuel
+  lh a0, 0(t0)
+  call MOD_FUEL
+
+  # checks if a new note from the music should be played and plays it if needed
+#  call music.NOTE
+  	
+  li t0, 0xFF200604   # memory address responsible to keep switching frames
+ 	sw s0, 0(t0)        # saves fresh printed frame on screen
+
  	 	
   # responsible to run the game loop
   lb t0, game.isrunnig		# checks if game is still running
@@ -298,6 +429,8 @@ OPEN_FILE:
 
  	ret
  	
+#---- ARGUMENTS ----
+# a0 = stage matrix
 CHECK_KEYPRESS: 
 	li t1, 0xFF200000		  # carrega o endere�o de controle do KDMMIO
 	lw t0, 0(t1)			    # Le bit de Controle Teclado
@@ -318,6 +451,8 @@ CHECK_KEYPRESS:
 	beq t2, t3, PONTO
 	li t3, 'f'
 	beq t2, t3, COMB
+	li t3, ' '
+	beq t2, t3, FIRE
 	j FIM
 
 UP:	
@@ -326,7 +461,7 @@ UP:
 	li t2, 0		          # digit 0 reference
 	sb t2, 0(t0)		      # saves 0 as direction val
 	
-	la t0, MATRIX1
+  mv t0, a0
 	la t1, game.matrix_location
 	lh t2, 0(t1)
 	add t3, t0, t2 		# address of the player from the matrix's beginning (sum of his stored position and the address of MATRIX1)
@@ -369,7 +504,7 @@ DOWN:
 	li t2, 1		            # digit 1 reference
 	sb t2, 0(t0)		        # saves 1 as direction val
 	
-	la t0, MATRIX1
+  mv t0, a0
 	la t1, game.matrix_location
 	lh t2, 0(t1)
 	add t3, t0, t2 		# address of the player from the matrix's beginning (sum of his stored position and the address of MATRIX1)
@@ -410,7 +545,7 @@ RIGHT:
 	li t2, 2		          # digit 2 reference
 	sb t2, 0(t0)		      # saves 2 as direction val
 	
-	la t0, MATRIX1
+  mv t0, a0
 	la t1, game.matrix_location
 	lh t2, 0(t1)
 	add t3, t0, t2 		# address of the player from the matrix's beginning (sum of his stored position and the address of MATRIX1)
@@ -451,7 +586,7 @@ LEFT:
 	li t2, 3		            # digit 3 reference
 	sb t2, 0(t0)		        # saves 3 as direction val
 	
-	la t0, MATRIX1
+  mv t0, a0
 	la t1, game.matrix_location
 	lh t2, 0(t1)
 	add t3, t0, t2 		# address of the player starting the matrix's beginning (sum of his stored position and the address MATRIX1)
@@ -487,6 +622,58 @@ LEFT:
 	j FIM 
 
 FIM: 	ret
+
+FIRE:	lb t0, game.player_bullet_isthere
+	bnez t0, FIM			# if there is already a player bullet on screen, don't make another one
+	lb t0, game.tank_direction	# loads tank direction to determine in which direction the bullet will travel
+	li t1, 0
+	beq t0, t1, FIRE_UP
+	li t1, 1
+	#beq t0, t1, FIRE_DOWN
+	li t1, 2
+	#beq t0, t1, FIRE_RIGHT
+	li t1, 3
+	#beq t0, t1, FIRE_LEFT
+FIRE_UP:
+	la t0, game.player_bullet_isthere
+	li t1, 1
+	sb t1, 0(t0)		# stores that there is already a bullet on screen
+	la t0, game.bullet_direction
+	sb zero, 0(t0)		# stores the direction as up
+	la t0, game.matrix_location
+	lh t0, 0(t0)
+	addi t0, t0, -36	# location in the matrix above the player
+	la t1, MATRIX1
+	add t1, t1, t0
+	lb t2, 0(t1)		# checks if we can spawn a bullet there
+	li t3, 1
+	beq t2, t3, FIM		# wall?
+	li t3, 3
+	beq t2, t3, FIM		# key?
+	li t3, 4
+	beq t2, t3, FIM		# key?
+	li t3, 5
+	beq t2, t3, FIM		# gate?
+	li t3, 6
+	beq t2, t3, FIM		# gate?
+	li t3, 7
+	sb t3, 0(t1)		# stores a bullet in that position
+	la t1, game.matrix_bullet
+	sh t0, 0(t1)		# stores the relative position of the bullet within the matrix     
+	# the bullet position will be 8 pixels above the player (assuming a 8x8 bullet sprite)
+	la t0, game.tank_position
+	lh t1, 0(t0)		# x position
+	lh t2, 2(t0)		# y position
+	addi t2, t2, -8		# up one line
+	la t0, game.bullet_position
+	sh t1, 0(t0)
+	sh t2, 2(t0)
+	ret
+
+MOVE_BULLET:
+	
+	call PRINT
+	j return
 
 # ---- ARGUMENTS ----
 # a0 = file name addr
@@ -704,6 +891,7 @@ F_COOLDOWN:
 	ret
 
 DEATH:
+# keyyyyy
 # clears where the player was
 	#frame 0
 	la t0, game.tank_position
@@ -766,7 +954,18 @@ DEATH:
 	sh zero, 0(t0)		# no cooldown
 	
 	# matrix position
-	la t0, MATRIX1
+  la t0, game.stage
+  li t1, 1
+  beq t1, t0, DEATH.matrix1
+  la t0, MATRIX2
+
+  j DEATH.continue
+  
+  DEATH.matrix1:
+    la t0, MATRIX1
+
+  DEATH.continue:
+
 	la t1, game.matrix_location
 	la t2, game.initial_matrix_location
 	
@@ -781,7 +980,6 @@ DEATH:
 	
 	lh t3, 0(t2)
 	sh t3, 0(t1)		# resets matrix_location
-	
 	
 # clears a tank symbol
 	# frame 0
@@ -799,7 +997,6 @@ DEATH:
 	# frame 1
 	la t0, game.life_address
 	la t1, game.life_dimensions
-	# la a0, endere�o de um black tile novo, pq o tamanho desses tanques n�o eh 8x8
 	la a0, game.tank_clear_bin
 	lh a1, 0(t0)
 	lh a2, 2(t0)
@@ -809,17 +1006,22 @@ DEATH:
 	li a6, 1	# provavelmente vai ter que fazer pros 2 frames
 	call PRINT
 	
+# modifies the position of the life symbol to be deleted
+	la t0, game.life_address
+	lh t1, 0(t0)		# we only need to modify the X coordinate
+	addi t1, t1, -11	# distance to the top left corner of the next life
+	sh t1, 0(t0)
+	
 # subtracts 1 life
 	la t0, game.lives
 	lb t1, 0(t0)
 	addi t1, t1, -1
-	beqz t1, GAME_OVER	# if there are no lives left, reset everything
+	beqz t1, game.GAME_OVER	# if there are no lives left, reset everything
 	sb t1, 0(t0)
 # return
 	j game.LOOP
 
-GAME_OVER:
-# resets the number of lives
+game.RESET:
 	la t0, game.lives
 	li t1, 3
 	sb t1, 0(t0)
@@ -829,8 +1031,8 @@ GAME_OVER:
 
 # resets the position of the first life to be deleted
 	la t0, game.life_address
-	li t1, 176
-	li t2, 314
+	li t1, 175
+	li t2, 234
 	sh t1, 0(t0)
 	sh t2, 2(t0)
 	
@@ -838,12 +1040,44 @@ GAME_OVER:
 	la t0, game.score
 	sw zero, 0(t0)
 
+  la t0, game.key1_complete
+  li t1, 0
+  sb t1, 0(t0)
+
+  la t0, game.key2_complete
+  sb t1, 0(t0) 
+
+  la t0, game.key1_active
+  sb t1, 0(t0)
+  la t0, game.key2_active
+  sb t1, 0(t0)
+
+  la t0, game.tank_position
+  li t1, 13
+  sh t1, 0(t0)
+  li t1, 209
+  sh t1, 2(t0)
+  
+  la t0, game.tank_direction
+  sb zero, 0(t0)
+
+  lh t0, game.initial_matrix_location
+  la t1, game.matrix_location
+  sh t0, 0(t1)
+
+  la t0, game.stage
+  li t1, 1
+  sb t1, 0(t0)
+
+	j game.SETUP
+
+game.GAME_OVER:
 # makes the game stop, so you contemplate why you lost (we can put a game over screen here)
 	li a0, 3500
 	li a7, 32
 	ecall
-# resets the map
-	j game.SETUP
+
+  j game.RESET
 
 # ---- ARGUMENTS ----
 # a0 = frame to print
@@ -935,11 +1169,14 @@ PONTO:
 	ret
 
 game.KEY1_ACTIVATION:
-  la t0, game.key1_active
   li t1, 1 
+  lb t0, game.key2_active
+  beq t0, t1, game.KEY1_ACTIVATION_END
+
+  la t0, game.key1_active
   sb t1, 0(t0)
   
-  la t0, MATRIX1
+  mv t0, a0
   sb t1, 25(t0) 
 
   li t1, 5
@@ -950,14 +1187,18 @@ game.KEY1_ACTIVATION:
   li t1, 1
   sb t1, 0(t0)
 
+  game.KEY1_ACTIVATION_END:
   j game.LOOP
 
 game.KEY2_ACTIVATION:
-  la t0, game.key2_active
   li t1, 1
+  lb t0, game.key1_active
+  beq t0, t1, game.KEY2_ACTIVATION_END
+
+  la t0, game.key2_active
   sb t1, 0(t0)
 
-  la t0, MATRIX1
+  mv t0, a0
   sb t1, 15(t0)
 
   li t1, 6
@@ -967,7 +1208,8 @@ game.KEY2_ACTIVATION:
   la t0, game.need_render
   li t1, 1
   sb t1, 0(t0)
-
+  
+  game.KEY2_ACTIVATION_END:
   j game.LOOP
   
 game.KEY1_COMPLETION:
@@ -979,7 +1221,7 @@ game.KEY1_COMPLETION:
   li t1, 1
   sb t1, 0(t0)
 
-  la t0, MATRIX1
+  mv t0, a0
   li t1, 0
   sb t1, 789(t0) 
   sb t1, 790(t0)
@@ -1008,10 +1250,10 @@ game.KEY2_COMPLETION:
   li t1, 1 
   sb t1, 0(t0)
 
-  la t0, MATRIX1
+  mv t0, a0
   li t1, 0
-  sb t1, 825(t0)
-  sb t1, 826(t0)
+  sb t1, 753(t0)
+  sb t1, 754(t0)
 
   la t0, game.need_render
   li t1, 1
@@ -1028,21 +1270,23 @@ game.KEY2_COMPLETION:
 
   j game.LOOP
   
-game.RE_RENDER_STAGE: 
+game.RE_RENDER_STAGE1: 
   lb t0, game.key1_active
   li t1, 1
-  beq t0, t1, key1_activation 
+  beq t0, t1, game.RE_RENDER1.key1_activation
 
   lb t0, game.key2_active
-  beq t0, t1, key2_activation
-
-  lb t0, game.key2_complete
-  beq t0, t1, key2_completion
+  beq t0, t1, game.RE_RENDER1.key2_activation
 
   lb t0, game.key1_complete
-  beq t0, t1, key1_completion
+  beq t0, t1, game.RE_RENDER1.key1_completion
 
-  key1_activation:
+  lb t0, game.key2_complete
+  beq t0, t1, game.RE_RENDER1.key2_completion
+
+  j game.RE_RENDER1.end
+
+  game.RE_RENDER1.key1_activation:
     la t0, stage1.key1_position
     la t1, game.key_dimensions
 
@@ -1085,9 +1329,9 @@ game.RE_RENDER_STAGE:
     li a6, 0
     call PRINT
     
-    j game.RE_RENDER_STAGE_END
+    j game.RE_RENDER1.end
 
-  key1_completion: 
+  game.RE_RENDER1.key1_completion: 
     la t0, game.gate1_position
     la t1, game.gate_dimensions
 
@@ -1122,22 +1366,22 @@ game.RE_RENDER_STAGE:
     lh t1, 0(t0) 
     addi t1, t1, 50
     li t2, 285
-    bgt t1, t2, max_fuel
+    bgt t1, t2, game.RE_RENDER1.max_fuel
 
     sh t1, 0(t0)
-    j normal      
+    j game.RE_RENDER1.normal
 
-    max_fuel:
-      sh t2, 0(t0)
+    game.RE_RENDER1.max_fuel:
+    sh t2, 0(t0)
 
-    normal:
-      la t0, game.need_render
-      li t1, 0
-      sb t1, 0(t0)
+    game.RE_RENDER1.normal:
+    la t0, game.need_render
+    li t1, 0
+    sb t1, 0(t0)
 
-    j game.RE_RENDER_STAGE_END
+    j game.RE_RENDER1.end
 
-  key2_activation:
+  game.RE_RENDER1.key2_activation:
     la t0, stage1.key2_position
     la t1, game.key_dimensions
 
@@ -1180,9 +1424,9 @@ game.RE_RENDER_STAGE:
     li t1, 0
     sb t1, 0(t0)
     
-    j game.RE_RENDER_STAGE_END
+    j game.RE_RENDER1.end
 
-  key2_completion:
+  game.RE_RENDER1.key2_completion:
     la t0, game.gate2_position
     la t1, game.gate_dimensions
 
@@ -1216,9 +1460,425 @@ game.RE_RENDER_STAGE:
     la t0, game.need_render
     li t1, 0
     sb t1, 0(t0)
+
+    la t0, game.fuel
+    lh t1, 0(t0) 
+    addi t1, t1, 50
+    li t2, 285
+    bgt t1, t2, game.RE_RENDER1.max_fuel1
+
+    sh t1, 0(t0)
+    j game.RE_RENDER1.normal1      
+
+    game.RE_RENDER1.max_fuel1:
+    sh t2, 0(t0)
+
+    game.RE_RENDER1.normal1:
+      la t0, game.need_render
+      li t1, 0
+      sb t1, 0(t0)
     
-  game.RE_RENDER_STAGE_END:
+  game.RE_RENDER1.end:
+    li t1, 1  
+    lb t0, game.key1_complete
+    bne t0, t1, game.RE_RENDER1.keep_going
+
+    lb t0, game.key2_complete
+    bne t0, t1, game.RE_RENDER1.keep_going
+
+    call game.clear_all_gates
+    
+    game.RE_RENDER1.keep_going:
     j game.LOOP
+
+game.RE_RENDER_STAGE2:
+  lb t0, game.key1_active
+  li t1, 1
+  beq t0, t1, game.RE_RENDER2.key1_activation
+
+  lb t0, game.key2_active
+  beq t0, t1, game.RE_RENDER2.key2_activation
+
+  lb t0, game.key1_complete
+  beq t0, t1, game.RE_RENDER2.key1_completion
+
+  lb t0, game.key2_complete
+  beq t0, t1, game.RE_RENDER2.key2_completion
+
+  j game.RE_RENDER2.end
+
+  game.RE_RENDER2.key1_activation:
+    la t0, stage2.key1_position
+    la t1, game.key_dimensions
+
+    la a0, game.key_clear  
+    lh a1, 0(t0) 
+    lh a2, 2(t0)
+    lb a3, 0(t1)
+    lb a4, 1(t1)
+    li a5, 0
+    li a6, 0
+    call PRINT 
+
+    li a6, 1
+    call PRINT
+
+    la t0, game.need_render
+    li t1, 0
+    sb t1, 0(t0)
+
+    la t0, game.gate1_position  
+    la t1, game.gate_dimensions
+
+    la a0, game.gate_clear
+    lh a1, 0(t0)
+    lh a1, 0(t0) 
+    lh a2, 2(t0)
+    lb a3, 0(t1)
+    lb a4, 1(t1)
+    li a5, 0
+    li a6, 0
+    call PRINT 
+
+    li a6, 1 
+    call PRINT
+
+    la a0, game.gate1_bin
+    addi a1, a1, -16
+    call PRINT
+    
+    li a6, 0
+    call PRINT
+    
+    j game.RE_RENDER2.end
+
+  game.RE_RENDER2.key1_completion: 
+    la t0, game.gate1_position
+    la t1, game.gate_dimensions
+
+    la a0, game.gate_clear  
+    lh a1, 0(t0) 
+    addi a1, a1, -16
+    lh a2, 2(t0)
+    lb a3, 0(t1)
+    lb a4, 1(t1)
+    li a5, 0
+    li a6, 0
+    call PRINT 
+
+    li a6, 1
+    call PRINT
+
+    la t0, game.gate1_position
+    la t1, game.key_dimensions
+    la a0, game.key_clear
+    lh a1, 0(t0)
+    lh a2, 2(t0)
+    lb a3, 0(t1)
+    lb a4, 1(t1)
+    li a5, 2
+    li a6, 0
+    call PRINT 
+
+    li a6, 1 
+    call PRINT
+
+    la t0, game.fuel
+    lh t1, 0(t0) 
+    addi t1, t1, 50
+    li t2, 285
+    bgt t1, t2, game.RE_RENDER2.max_fuel
+
+    sh t1, 0(t0)
+    j game.RE_RENDER2.normal
+
+    game.RE_RENDER2.max_fuel:
+    sh t2, 0(t0)
+
+    game.RE_RENDER2.normal:
+    la t0, game.need_render
+    li t1, 0
+    sb t1, 0(t0)
+
+    li t1, 1
+    lb t0, game.key2_complete
+    beq t0, t1, game.RE_RENDER2.key2_completion
+
+    j game.RE_RENDER2.end
+
+  game.RE_RENDER2.key2_activation:
+    la t0, stage2.key2_position
+    la t1, game.key_dimensions
+
+    la a0, game.key_clear  
+    lh a1, 0(t0) 
+    lh a2, 2(t0)
+    lb a3, 0(t1)
+    lb a4, 1(t1)
+    li a5, 0
+    li a6, 0
+    call PRINT 
+
+    li a6, 1
+    call PRINT
+
+    la t0, game.gate2_position  
+    la t1, game.gate_dimensions
+
+    la a0, game.gate_clear
+    lh a1, 0(t0)
+    lh a1, 0(t0) 
+    lh a2, 2(t0)
+    lb a3, 0(t1)
+    lb a4, 1(t1)
+    li a5, 0
+    li a6, 0
+    call PRINT 
+
+    li a6, 1 
+    call PRINT
+
+    la a0, game.gate2_bin
+    addi a1, a1, -16
+    call PRINT
+    
+    li a6, 0
+    call PRINT
+
+    la t0, game.need_render
+    li t1, 0
+    sb t1, 0(t0)
+    
+    j game.RE_RENDER2.end
+
+  game.RE_RENDER2.key2_completion:
+    la t0, game.gate2_position
+    la t1, game.gate_dimensions
+
+    la a0, game.gate_clear  
+    lh a1, 0(t0) 
+    addi a1, a1, -16
+    lh a2, 2(t0)
+    lb a3, 0(t1)
+    lb a4, 1(t1)
+    li a5, 0
+    li a6, 0
+    call PRINT 
+
+    li a6, 1
+    call PRINT
+
+    la t0, game.gate2_position
+    la t1, game.key_dimensions
+    la a0, game.key_clear
+    lh a1, 0(t0)
+    lh a2, 2(t0)
+    lb a3, 0(t1)
+    lb a4, 1(t1)
+    li a5, 2
+    li a6, 0
+    call PRINT 
+
+    li a6, 1 
+    call PRINT
+
+    la t0, game.need_render
+    li t1, 0
+    sb t1, 0(t0)
+
+    la t0, game.fuel
+    lh t1, 0(t0) 
+    addi t1, t1, 50
+    li t2, 285
+    bgt t1, t2, game.RE_RENDER2.max_fuel1
+
+    sh t1, 0(t0)
+    j game.RE_RENDER2.normal1      
+
+    game.RE_RENDER2.max_fuel1:
+    sh t2, 0(t0) 
+
+    game.RE_RENDER2.normal1:
+      la t0, game.need_render
+      li t1, 0
+      sb t1, 0(t0)
+    
+  game.RE_RENDER2.end:
+    li t1, 1  
+    lb t0, game.key1_complete
+    bne t0, t1, game.RE_RENDER2.keep_going
+
+    lb t0, game.key2_complete
+    bne t0, t1, game.RE_RENDER2.keep_going
+
+    call game.clear_all_gates
+    
+    game.RE_RENDER2.keep_going:
+    j game.LOOP
+
+game.clear_all_gates:
+    la t0, game.gate1_position
+    la t1, game.gate_dimensions
+
+    la a0, game.gate_clear  
+    lh a1, 0(t0) 
+    addi a1, a1, -16
+    lh a2, 2(t0)
+    lb a3, 0(t1)
+    lb a4, 1(t1)
+    li a5, 0
+    li a6, 0
+    call PRINT 
+
+    li a6, 1
+    call PRINT
+
+    la t0, game.gate2_position
+    la a0, game.gate_clear  
+    lh a2, 2(t0)
+    li a6, 0
+    call PRINT 
+
+    li a6, 1
+    call PRINT
+
+    la t0, game.gate2_position
+    la t1, game.key_dimensions
+    la a0, game.key_clear
+    lh a1, 0(t0)
+    lh a2, 2(t0)
+    lb a3, 0(t1)
+    lb a4, 1(t1)
+    li a5, 2
+    li a6, 0
+    call PRINT 
+
+    li a6, 1 
+    call PRINT
+
+    la t0, game.gate1_position
+    lh a1, 0(t0) 
+    lh a2, 2(t0)
+    li a5, 2
+    li a6, 0
+    call PRINT 
+
+    li a6, 1
+    call PRINT
+
+    li t1, 1
+    lb t0, game.stage
+    beq t0, t1, game.clear_all_gates.jump1
+
+    j stage2.COMPLETION
+
+    game.clear_all_gates.jump1:
+      j stage1.COMPLETION
+
+game.stage_completion_animation:
+  la t0, game.whiteGate_position
+  la t1, game.whiteGateClear_dimensions
+
+  la a0, game.whiteGateClear
+  lh a1, 0(t0)
+  lh a2, 2(t0)
+  lb a3, 0(t1)
+  lb a4, 1(t1)
+  li a5, 0
+  li a6, 0
+  call PRINT
+
+  li a6, 1
+  call PRINT
+
+  la t0, game.tank_position
+  la t1, game.tank_dimensions
+
+  la a0, game.tank_clear_bin
+  lh a1, 0(t0)
+  lh a2, 2(t0)
+  lb a3, 0(t1)
+  lb a4, 1(t1)
+  li a5, 0
+  li a6, 0 
+  call PRINT
+
+  li a6, 1
+  call PRINT
+
+  la t1, game.tank_dimensions
+  la a0, game.tank_bin
+  li a1, 277
+  li a2, 200
+  lb a3, 0(t1)
+  lb a4, 1(t1)
+  li a5, 2
+  li a6, 0 
+  call PRINT
+
+  li a6, 1
+  call PRINT
+
+	li a0, 2000
+	li a7, 32
+	ecall			# realiza uma pausa de 1500 ms
+
+  la t1, game.tank_dimensions
+  la a0, game.tank_clear_bin
+  li a1, 277
+  li a2, 200
+  lb a3, 0(t1)
+  lb a4, 1(t1)
+  li a5, 2
+  li a6, 0 
+  call PRINT
+
+  li a6, 1
+  call PRINT
+
+  la t1, game.tank_dimensions
+  la a0, game.tank_bin
+  li a1, 285
+  li a2, 200
+  lb a3, 0(t1)
+  lb a4, 1(t1)
+  li a5, 2
+  li a6, 0 
+  call PRINT
+
+  li a6, 1
+  call PRINT
+
+	li a0, 2000
+	li a7, 32
+	ecall			# realiza uma pausa de 1500 ms
+
+  li t1, 1
+  lb t0, game.stage
+  beq t0, t1, game.stage_completion_animation.jump1
+
+  j stage2.COMPLETION.continuation
+
+  game.stage_completion_animation.jump1:
+    j stage1.COMPLETION.continuation
+  ret
+
+stage1.COMPLETION:
+  call game.stage_completion_animation
+
+  stage1.COMPLETION.continuation:
+  li t0, 2
+  la t1, game.stage
+  sb t0, 0(t1)
+
+  j stage2.SETUP
+
+stage2.COMPLETION:
+  call game.stage_completion_animation
+
+  stage2.COMPLETION.continuation:
+  
+  j game.RESET
 
 music.NOTE:
   # gets the duration of the current note
