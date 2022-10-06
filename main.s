@@ -37,7 +37,7 @@ game.whiteGateClear:  .space 150
 
 # game constants
 game.initial_matrix_location: .half 865 # usado quando o player morrer
-game.matrix_location: .half 865 # usado pra verificar os espa�os em volta
+game.matrix_location: .half 865 # usado pra verificar os espa?os em volta
 game.matrix_bullet: .half 0
 
 game.isrunnig: .byte 1 # defines when the game loop stops
@@ -80,12 +80,13 @@ stage1.key2_position: .half 117, 17
 stage2.key1_position:  .half 150, 17
 stage2.key2_position: .half 21, 17
 
-game.bullet_position: .half 13, 209		# (x, y) 
+game.bullet_position: .half 311, 231		# (x, y) 
 game.bullet_old_position: .half 311, 231	# (x, y) used to have a reference to where to clean the screen
 game.bullet_dimensions: .byte 8, 8		# (width, height) a gente pode fazer 8x8 ou fazer um menor, vai depender do tamanho da sprite
 game.bullet_direction: .byte 0 		        # up = 0, down = 1, right = 2, left = 3
-game.bullet_duration: .half 1000
+game.bullet_duration: .half 1000		# how many iterations until we move the bullet
 game.player_bullet_isthere: .byte 0		# 0 = bullet is dead, 1 = is alive, can't spawn another one
+game.bullet_distance: .byte 9			# number of tiles that the bullet will move
 
 music.num: .word 121
 # note0, duration_bote0, note1, ... 
@@ -300,12 +301,41 @@ j game.LOOP
   
   la a0, MATRIX2
   call CHECK_KEYPRESS
+  
+  # updates and prints the bullet
+  	la t0, game.bullet_duration
+  	lh a0, 0(t0)
+  	lb a1, game.bullet_distance
+  	la a2, game.bullet_position
+  	la a3, game.bullet_old_position
+  	lb a4, game.bullet_direction
+  	la a5, game.matrix_bullet
+  	la a6, game.player_bullet_isthere
+  	la a7, MATRIX2
+  	call MOVE_BULLET
+
   j check_render
 
   stage1Logic:
   la a0, MATRIX1
  	call CHECK_KEYPRESS   # does the keyboard check logic
+ 	la t0, game.bullet_duration
+  	lh a0, 0(t0)
+  	lb a1, game.bullet_distance
+  	la a2, game.bullet_position
+  	la a3, game.bullet_old_position
+  	lb a4, game.bullet_direction
+  	la a5, game.matrix_bullet
+  	la a6, game.player_bullet_isthere
+  	la a7, MATRIX2
+  	call MOVE_BULLET
 
+  bullet_return:
+	la t0, game.bullet_duration
+	sh a0, 0(t0)
+	la t0, game.bullet_distance
+	sb a1, 0(t0)
+	
   check_render:
 
   li t0, 1
@@ -366,13 +396,6 @@ j game.LOOP
 	mv a6, s0
 	call PRINT   # clears the screen
   
-  # checks if we can already move the bullet
-  	la t0, game.bullet_duration
-  	lh t1, 0(t0)
-  	beqz t1, MOVE_BULLET
-  	addi t1, t1, -1
-  	sh t1, 0(t0)
-  return:
   # loads the info needed to print the fuel bar
   la t0, game.fuel
   lh a0, 0(t0)
@@ -385,7 +408,7 @@ j game.LOOP
   call MOD_FUEL
 
   # checks if a new note from the music should be played and plays it if needed
-#  call music.NOTE
+  call music.NOTE
   	
   li t0, 0xFF200604   # memory address responsible to keep switching frames
  	sw s0, 0(t0)        # saves fresh printed frame on screen
@@ -432,11 +455,11 @@ OPEN_FILE:
 #---- ARGUMENTS ----
 # a0 = stage matrix
 CHECK_KEYPRESS: 
-	li t1, 0xFF200000		  # carrega o endere�o de controle do KDMMIO
+	li t1, 0xFF200000		  # carrega o endere?o de controle do KDMMIO
 	lw t0, 0(t1)			    # Le bit de Controle Teclado
 	andi t0, t0, 0x0001		# mascara o bit menos significativo
 
-  beq t0, zero, FIM 	  # Se n�o h� tecla pressionada ent�o vai para FIM
+  beq t0, zero, FIM 	  # Se n?o h? tecla pressionada ent?o vai para FIM
   lw t2, 4(t1)  			  # le o valor da tecla tecla
 
 	li t3, 'w'
@@ -629,23 +652,19 @@ FIRE:	lb t0, game.player_bullet_isthere
 	li t1, 0
 	beq t0, t1, FIRE_UP
 	li t1, 1
-	#beq t0, t1, FIRE_DOWN
+	beq t0, t1, FIRE_DOWN
 	li t1, 2
-	#beq t0, t1, FIRE_RIGHT
+	beq t0, t1, FIRE_RIGHT
 	li t1, 3
-	#beq t0, t1, FIRE_LEFT
+	beq t0, t1, FIRE_LEFT
 FIRE_UP:
-	la t0, game.player_bullet_isthere
-	li t1, 1
-	sb t1, 0(t0)		# stores that there is already a bullet on screen
-	la t0, game.bullet_direction
-	sb zero, 0(t0)		# stores the direction as up
 	la t0, game.matrix_location
 	lh t0, 0(t0)
 	addi t0, t0, -36	# location in the matrix above the player
-	la t1, MATRIX1
-	add t1, t1, t0
-	lb t2, 0(t1)		# checks if we can spawn a bullet there
+	# la t1, MATRIX1 == a0
+	add a0, a0, t0
+	
+	lb t2, 0(a0)		# checks if we can spawn a bullet there
 	li t3, 1
 	beq t2, t3, FIM		# wall?
 	li t3, 3
@@ -656,10 +675,20 @@ FIRE_UP:
 	beq t2, t3, FIM		# gate?
 	li t3, 6
 	beq t2, t3, FIM		# gate?
+	
 	li t3, 7
-	sb t3, 0(t1)		# stores a bullet in that position
+	sb t3, 0(a0)		# stores a bullet in that position
+	
 	la t1, game.matrix_bullet
-	sh t0, 0(t1)		# stores the relative position of the bullet within the matrix     
+	sh t0, 0(t1)		# stores the relative position of the bullet within the matrix 
+	
+	la t0, game.player_bullet_isthere
+	li t1, 1
+	sb t1, 0(t0)		# stores that there is already a bullet on screen
+	
+	la t0, game.bullet_direction
+	sb zero, 0(t0)		# stores the direction as up
+	 
 	# the bullet position will be 8 pixels above the player (assuming a 8x8 bullet sprite)
 	la t0, game.tank_position
 	lh t1, 0(t0)		# x position
@@ -668,12 +697,529 @@ FIRE_UP:
 	la t0, game.bullet_position
 	sh t1, 0(t0)
 	sh t2, 2(t0)
+	
 	ret
 
-MOVE_BULLET:
+FIRE_DOWN:
+	la t0, game.matrix_location
+	lh t0, 0(t0)
+	addi t0, t0, 36		# location in the matrix below the player
+	# la t1, MATRIX1 == a0
+	add a0, a0, t0
 	
+	lb t2, 0(a0)		# checks if we can spawn a bullet there
+	li t3, 1
+	beq t2, t3, FIM		# wall?
+	li t3, 3
+	beq t2, t3, FIM		# key?
+	li t3, 4
+	beq t2, t3, FIM		# key?
+	li t3, 5
+	beq t2, t3, FIM		# gate?
+	li t3, 6
+	beq t2, t3, FIM		# gate?
+	
+	li t3, 7
+	sb t3, 0(a0)		# stores a bullet in that position
+	
+	la t1, game.matrix_bullet
+	sh t0, 0(t1)		# stores the relative position of the bullet within the matrix 
+
+	la t0, game.player_bullet_isthere
+	li t1, 1
+	sb t1, 0(t0)		# stores that there is already a bullet on screen
+	
+	la t0, game.bullet_direction
+	li t1, 1
+	sb t1, 0(t0)		# stores the direction as down
+		 
+	# the bullet position will be 8 pixels above the player (assuming a 8x8 bullet sprite)
+	la t0, game.tank_position
+	lh t1, 0(t0)		# x position
+	lh t2, 2(t0)		# y position
+	addi t2, t2, 8		# down one line
+	la t0, game.bullet_position
+	sh t1, 0(t0)
+	sh t2, 2(t0)
+	
+	ret
+
+FIRE_RIGHT:
+	la t0, game.matrix_location
+	lh t0, 0(t0)
+	addi t0, t0, 1		# location in the matrix to the right of the player
+	# la t1, MATRIX1 == a0
+	add a0, a0, t0
+	
+	lb t2, 0(a0)		# checks if we can spawn a bullet there
+	li t3, 1
+	beq t2, t3, FIM		# wall?
+	li t3, 3
+	beq t2, t3, FIM		# key?
+	li t3, 4
+	beq t2, t3, FIM		# key?
+	li t3, 5
+	beq t2, t3, FIM		# gate?
+	li t3, 6
+	beq t2, t3, FIM		# gate?
+	
+	li t3, 7
+	sb t3, 0(a0)		# stores a bullet in that position
+	
+	la t1, game.matrix_bullet
+	sh t0, 0(t1)		# stores the relative position of the bullet within the matrix 
+	
+	la t0, game.player_bullet_isthere
+	li t1, 1
+	sb t1, 0(t0)		# stores that there is already a bullet on screen
+	
+	la t0, game.bullet_direction
+	li t1, 2
+	sb t1, 0(t0)		# stores the direction as down
+	 
+	# the bullet position will be 8 pixels above the player (assuming a 8x8 bullet sprite)
+	la t0, game.tank_position
+	lh t1, 0(t0)		# x position
+	lh t2, 2(t0)		# y position
+	addi t1, t1, 8		# right one line
+	la t0, game.bullet_position
+	sh t1, 0(t0)
+	sh t2, 2(t0)
+	
+	ret
+
+FIRE_LEFT:
+	la t0, game.matrix_location
+	lh t0, 0(t0)
+	addi t0, t0, -1		# location in the matrix to the left of the player
+	# la t1, MATRIX1 == a0
+	add a0, a0, t0
+	
+	lb t2, 0(a0)		# checks if we can spawn a bullet there
+	li t3, 1
+	beq t2, t3, FIM		# wall?
+	li t3, 3
+	beq t2, t3, FIM		# key?
+	li t3, 4
+	beq t2, t3, FIM		# key?
+	li t3, 5
+	beq t2, t3, FIM		# gate?
+	li t3, 6
+	beq t2, t3, FIM		# gate?
+	
+	li t3, 7
+	sb t3, 0(a0)		# stores a bullet in that position
+	
+	la t1, game.matrix_bullet
+	sh t0, 0(t1)		# stores the relative position of the bullet within the matrix 
+
+	la t0, game.player_bullet_isthere
+	li t1, 1
+	sb t1, 0(t0)		# stores that there is already a bullet on screen
+	
+	la t0, game.bullet_direction
+	li t1, 3
+	sb t1, 0(t0)		# stores the direction as down
+		 
+	# the bullet position will be 8 pixels above the player (assuming a 8x8 bullet sprite)
+	la t0, game.tank_position
+	lh t1, 0(t0)		# x position
+	lh t2, 2(t0)		# y position
+	addi t1, t1, -8		# left one line
+	la t0, game.bullet_position
+	sh t1, 0(t0)
+	sh t2, 2(t0)
+	
+	ret
+
+# ---- ARGUMENTS ----
+# a0 = bullet duration counter
+# a1 = distance left to move
+# a2 = address of the current position
+# a3 = address of the last position
+# a4 = orientation
+# a5 = address of its matrix position
+# a6 = address of the state of the bullet (dead or alive)
+# a7 = MATRIX address
+#
+# ---- RETURNS ----
+# a0 = new bullet duration counter
+# a1 = new distance left to move
+MOVE_BULLET:
+# checks if we can already move the bullet
+	lb t0, 0(a6)
+	beqz t0, bullet_return
+  	bnez a0, BULLET_STAY	# in case we can't move yet, decrease the counter in memory
+  	li a0, 1000
+  	beqz a1, BULLET_DEATH	# if it can move, check if it already went throught all the tiles it had to do
+  	mv s6, a1
+	# checks the orientation of the bullet
+	li t0, 0
+	beq t0, a4, BULLET_UP
+	li t0, 1
+	beq t0, a4, BULLET_DOWN
+	li t0, 2
+	beq t0, a4, BULLET_RIGHT
+	j BULLET_LEFT		# if it's not any of the above, it's left
+
+BULLET_UP:
+	# checks if the space above is open
+	lh t0, 0(a5)
+	# la t1, MATRIX1 == a7
+	add t0, t0, a7		# address in matrix
+	#addi t2, t0, -36	# up in the matrix
+	
+	# store blank where it was and 7 where it will be
+	addi t2, t0, 36
+	sb zero, 0(t2)		# stores blank
+	li t3, 7
+	sb t3, 0(t0)		# stores bullet where it is
+	#li t3, 7
+	#sb s3, 0(t2)		# stores a bullet where it is going
+	
+	mv s4, a2		# address of the current position
+	mv s5, a3		# address of the old position
+	mv s7, a5
+	mv a5, a4		# orientation
+
+	la a0, game.tankRed_bin	# testing to see if it moves
+	lh a1, 0(s4)		# x 
+	lh a2, 2(s4)		# y 
+	la t2, game.bullet_dimensions
+	lb a3, 0(t2)		# width
+	lb a4, 1(t2)		# height
+	li a6, 0
 	call PRINT
-	j return
+	
+	li a6, 1
+	call PRINT		# both frames
+
+	# clearing where it was
+	la a0, game.tank_clear_bin
+	lh a1, 0(s5)	# x
+	lh a2, 2(s5)	# y
+	la t2, game.bullet_dimensions
+	lb a3, 0(t2)		# width
+	lb a4, 1(t2)		# height
+	li a5, 0
+	li a6, 0
+	call PRINT
+	
+	li a6, 1
+	call PRINT	# both frames
+	
+	# updates old position in memory
+	lh a1, 0(s4)	# now old x position
+	lh a2, 2(s4)	# now old y position
+	sh a1, 0(s5)
+	sh a2, 2(s5)	
+	
+	lh a1, 0(s4)
+	lh a2, 2(s4)
+	addi a2, a2, -8		# updates the position
+	sh a1, 0(s4)
+	sh a2, 2(s4)		# stores the new position
+	
+	# checks if the space above is open
+	lh t0, 0(s7)
+	# la t1, MATRIX1 == a7
+	add t0, t0, a7		# address in matrix
+	addi t2, t0, -36	# up in the matrix
+	lb t3, 0(t2)
+	#bnez t3, BULLET_END_PATH	# checks if the space ahead is available (we can check for enemies before this)
+	lh t0, 0(s7)
+	addi t0, t0, -36
+	sh t0, 0(s7)		# updates his position in the matrix
+	bnez t3, BULLET_END_PATH	# checks if the space ahead is available (we can check for enemies before this)
+	
+	li a0, 1000
+	addi a1, s6, -1
+	j bullet_return
+
+BULLET_DOWN:
+	# checks if the space above is open
+	lh t0, 0(a5)
+	# la t1, MATRIX1 == a7
+	add t0, t0, a7		# address in matrix
+	#addi t2, t0, -36	# up in the matrix
+	
+	# store blank where it was and 7 where it will be
+	addi t2, t0, -36
+	sb zero, 0(t2)		# stores blank
+	li t3, 7
+	sb t3, 0(t0)		# stores bullet where it is
+	#li t3, 7
+	#sb s3, 0(t2)		# stores a bullet where it is going
+	
+	mv s4, a2		# address of the current position
+	mv s5, a3		# address of the old position
+	mv s7, a5
+	mv a5, a4		# orientation
+
+	la a0, game.tankRed_bin	# testing to see if it moves
+	lh a1, 0(s4)		# x 
+	lh a2, 2(s4)		# y 
+	la t2, game.bullet_dimensions
+	lb a3, 0(t2)		# width
+	lb a4, 1(t2)		# height
+	li a6, 0
+	call PRINT
+	
+	li a6, 1
+	call PRINT		# both frames
+
+	# clearing where it was
+	la a0, game.tank_clear_bin
+	lh a1, 0(s5)	# x
+	lh a2, 2(s5)	# y
+	la t2, game.bullet_dimensions
+	lb a3, 0(t2)		# width
+	lb a4, 1(t2)		# height
+	li a5, 0
+	li a6, 0
+	call PRINT
+	
+	li a6, 1
+	call PRINT	# both frames
+	
+	# updates old position in memory
+	lh a1, 0(s4)	# now old x position
+	lh a2, 2(s4)	# now old y position
+	sh a1, 0(s5)
+	sh a2, 2(s5)	
+	
+	lh a1, 0(s4)		# x
+	lh a2, 2(s4)		# y
+	addi a2, a2, 8		# updates the position
+	sh a1, 0(s4)
+	sh a2, 2(s4)		# stores the new position
+	
+	# checks if the space above is open
+	lh t0, 0(s7)
+	# la t1, MATRIX1 == a7
+	add t0, t0, a7		# address in matrix
+	addi t2, t0, 36		# down in the matrix
+	lb t3, 0(t2)
+	#bnez t3, BULLET_END_PATH	# checks if the space ahead is available (we can check for enemies before this)
+	lh t0, 0(s7)
+	addi t0, t0, 36
+	sh t0, 0(s7)		# updates his position in the matrix
+	bnez t3, BULLET_END_PATH	# checks if the space ahead is available (we can check for enemies before this)
+	
+	li a0, 1000
+	addi a1, s6, -1
+	j bullet_return
+
+BULLET_RIGHT:
+	# checks if the space above is open
+	lh t0, 0(a5)
+	# la t1, MATRIX1 == a7
+	add t0, t0, a7		# address in matrix
+	#addi t2, t0, -36	# up in the matrix
+	
+	# store blank where it was and 7 where it will be
+	addi t2, t0, -1
+	sb zero, 0(t2)		# stores blank
+	li t3, 7
+	sb t3, 0(t0)		# stores bullet where it is
+	#li t3, 7
+	#sb s3, 0(t2)		# stores a bullet where it is going
+	
+	mv s4, a2		# address of the current position
+	mv s5, a3		# address of the old position
+	mv s7, a5
+	mv a5, a4		# orientation
+
+	la a0, game.tankRed_bin	# testing to see if it moves
+	lh a1, 0(s4)		# x 
+	lh a2, 2(s4)		# y 
+	la t2, game.bullet_dimensions
+	lb a3, 0(t2)		# width
+	lb a4, 1(t2)		# height
+	li a6, 0
+	call PRINT
+	
+	li a6, 1
+	call PRINT		# both frames
+
+	# clearing where it was
+	la a0, game.tank_clear_bin
+	lh a1, 0(s5)	# x
+	lh a2, 2(s5)	# y
+	la t2, game.bullet_dimensions
+	lb a3, 0(t2)		# width
+	lb a4, 1(t2)		# height
+	li a5, 0
+	li a6, 0
+	call PRINT
+	
+	li a6, 1
+	call PRINT	# both frames
+	
+	# updates old position in memory
+	lh a1, 0(s4)	# now old x position
+	lh a2, 2(s4)	# now old y position
+	sh a1, 0(s5)
+	sh a2, 2(s5)	
+	
+	lh a1, 0(s4)
+	lh a2, 2(s4)
+	addi a1, a1, 8		# updates the position
+	sh a1, 0(s4)
+	sh a2, 2(s4)		# stores the new position
+	
+	# checks if the space above is open
+	lh t0, 0(s7)
+	# la t1, MATRIX1 == a7
+	add t0, t0, a7		# address in matrix
+	addi t2, t0, 1	# down in the matrix
+	lb t3, 0(t2)
+	lh t0, 0(s7)
+	addi t0, t0, 1
+	sh t0, 0(s7)		# updates his position in the matrix
+	bnez t3, BULLET_END_PATH	# checks if the space ahead is available (we can check for enemies before this)
+	
+	li a0, 1000
+	addi a1, s6, -1
+	j bullet_return
+	
+BULLET_LEFT:
+	# checks if the space above is open
+	lh t0, 0(a5)
+	# la t1, MATRIX1 == a7
+	add t0, t0, a7		# address in matrix
+	#addi t2, t0, -36	# up in the matrix
+	
+	# store blank where it was and 7 where it will be
+	addi t2, t0, 1
+	sb zero, 0(t2)		# stores blank
+	li t3, 7
+	sb t3, 0(t0)		# stores bullet where it is
+	#li t3, 7
+	#sb s3, 0(t2)		# stores a bullet where it is going
+	
+	mv s4, a2		# address of the current position
+	mv s5, a3		# address of the old position
+	mv s7, a5
+	mv a5, a4		# orientation
+
+	la a0, game.tankRed_bin	# testing to see if it moves
+	lh a1, 0(s4)		# x 
+	lh a2, 2(s4)		# y 
+	la t2, game.bullet_dimensions
+	lb a3, 0(t2)		# width
+	lb a4, 1(t2)		# height
+	li a6, 0
+	call PRINT
+	
+	li a6, 1
+	call PRINT		# both frames
+
+	# clearing where it was
+	la a0, game.tank_clear_bin
+	lh a1, 0(s5)	# x
+	lh a2, 2(s5)	# y
+	la t2, game.bullet_dimensions
+	lb a3, 0(t2)		# width
+	lb a4, 1(t2)		# height
+	li a5, 0
+	li a6, 0
+	call PRINT
+	
+	li a6, 1
+	call PRINT	# both frames
+	
+	# updates old position in memory
+	lh a1, 0(s4)	# now old x position
+	lh a2, 2(s4)	# now old y position
+	sh a1, 0(s5)
+	sh a2, 2(s5)	
+	
+	lh a1, 0(s4)
+	lh a2, 2(s4)
+	addi a1, a1, -8		# updates the position
+	sh a1, 0(s4)
+	sh a2, 2(s4)		# stores the new position
+	
+	# checks if the space above is open
+	lh t0, 0(s7)
+	# la t1, MATRIX1 == a7
+	add t0, t0, a7		# address in matrix
+	addi t2, t0, -1	# down in the matrix
+	lb t3, 0(t2)
+	lh t0, 0(s7)
+	addi t0, t0, -1
+	sh t0, 0(s7)		# updates his position in the matrix
+	bnez t3, BULLET_END_PATH	# checks if the space ahead is available (we can check for enemies before this)
+	
+	li a0, 1000
+	addi a1, s6, -1
+	j bullet_return
+
+BULLET_STAY:
+	addi a0, a0, -1
+  	j bullet_return 
+  	
+BULLET_END_PATH:
+	li a0, 1000
+	li a1, 0
+	j bullet_return
+  	
+BULLET_DEATH:
+	lh t1, 0(a5)		# resets the position in the matrix
+	# la t0, MATRIX1 == a7
+	add a7, a7, t1
+	li t0, 0
+	beq t0, a4, death_up
+	li t0, 1
+	beq t0, a4, death_down
+	li t0, 2
+	beq t0, a4, death_right
+#death_left:
+	addi a7, a7, 1
+	sb zero, 0(a7)
+	j volta_bullet
+death_up:
+	addi a7, a7, 36
+	sb zero, 0(a7)
+	j volta_bullet
+death_down:
+	addi a7, a7, -36
+	sb zero, 0(a7)
+	j volta_bullet
+death_right:
+	addi a7, a7, -2
+	sb zero, 0(a7)
+volta_bullet:
+	sh zero, 0(a5)		# sets the matrix position as 0
+	
+	mv s4, a2
+	mv s5, a3
+	
+	sb zero, 0(a6)		# makes the bullet not exist
+	
+	la a0, game.tank_clear_bin	# clears where the bullet was in both frames
+	lh a1, 0(s5)	# x
+	lh a2, 2(s5)	# y
+	la t2, game.bullet_dimensions
+	lb a3, 0(t2)	# width
+	lb a4, 1(t2)	# height
+	li a5, 0
+	li a6, 0
+	call PRINT
+
+	li a6, 1
+	call PRINT
+	
+	# sets the old position as the corner
+	li t2, 311
+	sh t2, 0(t0)
+	li t2, 231
+	sh t2, 2(t0)
+	
+	li a1, 9
+	li a0, 1000
+	j bullet_return
 
 # ---- ARGUMENTS ----
 # a0 = file name addr
@@ -921,7 +1467,7 @@ DEATH:
 	
 # plays an explosion sound and stops the code during it
 	li a0,40		# define a nota
-	li a1,1500		# define a dura��o da nota em ms
+	li a1,1500		# define a dura??o da nota em ms
 	li a2,127		# define o instrumento
 	li a3,127		# define o volume
 	li a7,33		# define o syscall
