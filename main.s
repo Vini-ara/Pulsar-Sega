@@ -13,6 +13,7 @@ tank:       .string "tank/tank.bin"
 tankRed:    .string "tankRed/redTank.bin"
 tankYellow: .string "tankYellow/yellowTank.bin"
 bullet:	    .string ""
+yellow_enemy: .string "yellowEnemy/BixoAmareloCerto.bin"
 key1:       .string "key1/key1.bin" 
 key2:       .string "key2/key2.bin"
 key_clear:  .string "keyClear/keyClear.bin"
@@ -34,6 +35,7 @@ game.gate1_bin:       .space 184        # alocates 184 bytes (23x8)
 game.gate2_bin:       .space 184        # alocates 184 bytes (23x8)
 game.gate_clear:       .space 184       # alocates 184 bytes (23x8)
 game.whiteGateClear:  .space 150  
+game.yellow_enemy_bin: .space 64
 
 # game constants
 game.initial_matrix_location: .half 865 # usado quando o player morrer
@@ -79,6 +81,16 @@ stage1.key2_position: .half 117, 17
 # stage 2 
 stage2.key1_position:  .half 150, 17
 stage2.key2_position: .half 21, 17
+
+# enemy 
+game.yellow_enemy.position: .half 13, 25
+game.yellow_enemy.old_position: .half 311, 231
+game.yellow_enemy.dimensions: .byte 8, 8
+game.yellow_enemy.direction: .byte 2
+game.yellow_enemy.initial_matrix_location: .half 37
+game.yellow_enemy.matrix_location: .half 37
+game.yellow_enemy.direction_cooldown: .half 0
+game.yellow_enemy.move_cooldown: .half 0
 
 game.bullet_position: .half 311, 231		# (x, y) 
 game.bullet_old_position: .half 311, 231	# (x, y) used to have a reference to where to clean the screen
@@ -154,6 +166,11 @@ game.SETUP:
   la t0, game.whiteGateClear_dimensions
   la s1, game.whiteGateClear
   call OPEN_FILE
+
+	la a0, yellow_enemy 
+	la t0, game.yellow_enemy.dimensions
+	la s1, game.yellow_enemy_bin
+	call OPEN_FILE
 
   la a0, menu
   li a1, 0
@@ -268,6 +285,24 @@ stage2.SETUP:
   li a6, 0
 	call PRINT
 
+	la t0, game.yellow_enemy.old_position
+	li t1, 311
+	sh t1, 0(t0)
+	li t1, 231
+	sh t1, 0(t0)
+
+	la t0, game.yellow_enemy.position 
+	li t1, 311
+	sh t1, 0(t0) 
+	li t1, 231
+	sh t1, 2(t0)
+
+	la t0, MATRIX1
+	lh t1, game.yellow_enemy.matrix_location
+	add t0, t0, t1
+	li t2, 0
+	sb t2, 0(t0)
+
   la t0, game.tank_position
   li t1, 13
   sh t1, 0(t0)
@@ -354,6 +389,8 @@ j game.LOOP
 
   no_re_render:
 
+
+
   # loads all the info to call the print method and print the tank on screen	
  	la t0, game.tank_position        
  	la t1, game.tank_dimensions
@@ -395,7 +432,41 @@ j game.LOOP
 	lb a5, game.tank_direction
 	mv a6, s0
 	call PRINT   # clears the screen
-  
+
+	lb t0, game.stage 
+	li t1, 1
+	beq t0, t1, print_enemy
+
+	j game.loop.move_enemy.continue
+
+	print_enemy:
+		la t0, game.yellow_enemy.old_position 
+		la t1, game.yellow_enemy.dimensions
+		la a0, game.tank_clear_bin
+		lh a1, 0(t0)
+		lh a2, 2(t0)
+		lb a3, 0(t1)
+		lb a4, 1(t1)
+		lb a5, game.yellow_enemy.direction
+		mv a6, s0
+		call PRINT   # clears the screen
+
+		la t0, game.yellow_enemy.position
+		la t1, game.yellow_enemy.dimensions  
+
+		la a0, game.yellow_enemy_bin 
+		lh a1, 0(t0)
+		lh a2, 2(t0) 
+		lb a3, 0(t1) 
+		lb a4, 1(t1) 
+		lb a5, game.yellow_enemy.direction 
+		mv a6, s0
+		call PRINT 
+
+		la a0, MATRIX1
+		call game.move_enemy
+
+	game.loop.move_enemy.continue:
   # loads the info needed to print the fuel bar
   la t0, game.fuel
   lh a0, 0(t0)
@@ -413,7 +484,6 @@ j game.LOOP
   li t0, 0xFF200604   # memory address responsible to keep switching frames
  	sw s0, 0(t0)        # saves fresh printed frame on screen
 
- 	 	
   # responsible to run the game loop
   lb t0, game.isrunnig		# checks if game is still running
   bne t0, zero, game.LOOP
@@ -500,6 +570,8 @@ UP:
   beq t6, t5, game.KEY1_COMPLETION
   li t5, 6
   beq t6, t5, game.KEY2_COMPLETION
+	li t5, 8
+	beq t5, t6, FIM
   
 	# if the tank can move:
 	sb zero, 0(t3) 		# stores blank where the player was
@@ -541,6 +613,8 @@ DOWN:
   beq t6, t5, game.KEY1_COMPLETION
   li t5, 6
   beq t6, t5, game.KEY2_COMPLETION
+	li t5, 8
+	beq t5, t6, FIM
 
 	# if the tank can move:
 	sb zero, 0(t3) 	# stores blank where the player was
@@ -582,6 +656,8 @@ RIGHT:
   beq t6, t5, game.KEY1_COMPLETION
   li t5, 6
   beq t6, t5, game.KEY2_COMPLETION
+	li t5, 8
+	beq t5, t6, FIM
 
 	# if the tank can move:
 	sb zero, 0(t3) 		# stores blank where the player was
@@ -623,6 +699,8 @@ LEFT:
   beq t6, t5, game.KEY1_COMPLETION
   li t5, 6
   beq t6, t5, game.KEY2_COMPLETION
+	li t5, 8
+	beq t5, t6, FIM
 
 	# if the tank can move:
 	sb zero, 0(t3) 		# stores blank where the player was
@@ -1491,6 +1569,85 @@ DEATH:
 	
 	la t0, game.tank_direction
 	sb zero, (t0)		# up 
+
+	la t0, game.yellow_enemy.position
+	la t1, game.yellow_enemy.dimensions
+
+	la a0, game.tank_clear_bin
+	lh a1, 0(t0)
+	lh a2, 2(t0)
+	lb a3, 0(t1)
+	lb a4, 1(t1)
+	lb a5, game.tank_direction
+	li a6, 1
+	call PRINT
+
+	li a6, 0
+	call PRINT
+
+	la t0, game.yellow_enemy.direction  
+	li t1, 2   
+	sb t1, 0(t0)
+
+	la t0, game.yellow_enemy.position 
+	li t1, 13
+	sh t1, 0(t0) 
+	li t1, 25
+	sh t1, 2(t0) 
+
+		la t0, game.yellow_enemy.position 
+	li t1, 13
+	sh t1, 0(t0) 
+	li t1, 25
+	sh t1, 2(t0)
+
+	la t0, MATRIX1
+	lh t1, game.yellow_enemy.matrix_location
+	add t0, t0, t1
+	li t2, 0
+	sb t2, 0(t0)
+
+	la t0, MATRIX1
+	lh t1, game.yellow_enemy.initial_matrix_location
+	add t0, t0, t1
+	li t2, 8
+	sb t2, 0(t0)
+
+	la t0, MATRIX2
+	lh t1, game.yellow_enemy.matrix_location
+	add t0, t0, t1
+	li t2, 0
+	sb t2, 0(t0)
+
+	la t0, MATRIX2
+	lh t1, game.yellow_enemy.initial_matrix_location
+	add t0, t0, t1
+	li t2, 8
+	sb t2, 0(t0)
+
+	la t0, game.yellow_enemy.matrix_location
+	sh t1, 0(t0)
+
+	la t0, game.yellow_enemy.direction_cooldown
+	li t1, 0
+	sh t1, 0(t0)
+
+	la t0, game.yellow_enemy.move_cooldown
+	li t1, 0 
+	sh t1, 0(t0)
+
+	la t0, game.yellow_enemy.matrix_location
+	lh t1, game.yellow_enemy.initial_matrix_location
+	sh t1, 0(t0)
+
+	la t0, game.yellow_enemy.direction_cooldown
+	li t1, 0
+	sh t1, 0(t0)
+
+	la t0, game.yellow_enemy.move_cooldown
+	li t1, 0 
+	sh t1, 0(t0)
+
 	
 	la t0, game.fuel
 	li t1, 285		# max fuel
@@ -1614,6 +1771,69 @@ game.RESET:
   la t0, game.stage
   li t1, 1
   sb t1, 0(t0)
+
+	la t0, game.yellow_enemy.direction  
+	li t1, 2   
+	sb t1, 0(t0)
+
+	la t0, game.yellow_enemy.position 
+	li t1, 13
+	sh t1, 0(t0) 
+	li t1, 25
+	sh t1, 2(t0) 
+
+	la t0, game.yellow_enemy.position 
+	li t1, 13
+	sh t1, 0(t0) 
+	li t1, 25
+	sh t1, 2(t0)
+
+	la t0, MATRIX1
+	lh t1, game.yellow_enemy.matrix_location
+	add t0, t0, t1
+	li t2, 0
+	sb t2, 0(t0)
+
+	la t0, MATRIX1
+	lh t1, game.yellow_enemy.initial_matrix_location
+	add t0, t0, t1
+	li t2, 8
+	sb t2, 0(t0)
+
+	la t0, MATRIX2
+	lh t1, game.yellow_enemy.matrix_location
+	add t0, t0, t1
+	li t2, 0
+	sb t2, 0(t0)
+
+	la t0, MATRIX2
+	lh t1, game.yellow_enemy.initial_matrix_location
+	add t0, t0, t1
+	li t2, 8
+	sb t2, 0(t0)
+
+	la t0, game.yellow_enemy.matrix_location
+	sh t1, 0(t0)
+
+	la t0, game.yellow_enemy.direction_cooldown
+	li t1, 0
+	sh t1, 0(t0)
+
+	la t0, game.yellow_enemy.move_cooldown
+	li t1, 0 
+	sh t1, 0(t0)
+
+	la t0, game.yellow_enemy.matrix_location
+	lh t1, game.yellow_enemy.initial_matrix_location
+	sh t1, 0(t0)
+
+	la t0, game.yellow_enemy.direction_cooldown
+	li t1, 0
+	sh t1, 0(t0)
+
+	la t0, game.yellow_enemy.move_cooldown
+	li t1, 0 
+	sh t1, 0(t0)
 
 	j game.SETUP
 
@@ -2506,5 +2726,216 @@ music.RESET:
 	sh t1, 2(t0)
 	
 	ret
+
+game.move_enemy:
+	mv s3, a0
+	lh t0, game.yellow_enemy.direction_cooldown
+	li t1, 30000
+	beq t1, t0, game.move_enemy.random_direction
+
+	la t0, game.yellow_enemy.direction_cooldown
+	lh t1, 0(t0)
+	addi t1, t1, 1
+	sh t1, 0(t0)
+
+	la t0, game.yellow_enemy.move_cooldown
+	lh t1, 0(t0)
+	addi t1, t1, 1
+	sh t1, 0(t0)
+
+	j game.move_enemy.move
+
+	game.move_enemy.random_direction:
+		li a7, 30
+		ecall   
+
+		li a7, 42
+		li a1, 4
+		ecall 
+
+		la t0, game.yellow_enemy.direction
+		sb a0, 0(t0)
+
+		li t0, 0
+		la t1, game.yellow_enemy.direction_cooldown
+		sh t0, 0(t1)
+
+		li t0, 0
+		la t1, game.yellow_enemy.move_cooldown
+		sh t0, 0(t1)
+
+		j game.move_enemy.end
+	
+	game.move_enemy.move:
+		lb t0, game.yellow_enemy.direction 
+
+		li t1, 0
+		beq t1, t0, game.move_enemy.check_up
+
+		li t1, 1
+		beq t1, t0, game.move_enemy.check_down
+
+		li t1, 2
+		beq t1, t0, game.move_enemy.check_right
+
+		j game.move_enemy.check_left
+
+	 	game.move_enemy.check_up:
+			lh t0, game.yellow_enemy.move_cooldown
+			li t1, 5000
+			bne t0, t1, game.move_enemy.end
+
+	 		mv t0, s3
+			lh t1, game.yellow_enemy.matrix_location
+			add t0, t1, t0
+	 		addi t0, t0, 1
+
+			
+	 		# checa o pixel da direita
+	 		lb t1, 0(t0)
+	 		bne zero, t1, game.move_enemy.random_direction
+
+	 		# atualiza a matriz
+			li t1, 8
+			sb t1, 0(t0)
+			addi t0, t0, -1
+			sb zero, 0(t0)
+
+			la t0, game.yellow_enemy.matrix_location
+			lh t1, game.yellow_enemy.matrix_location
+			addi t1, t1, 1
+			sh t1, 0(t0) 
+
+			la t0, game.yellow_enemy.position
+			la t1, game.yellow_enemy.old_position
+			lw t2, 0(t0)
+			sw t2, 0(t1)
+
+			lh t1, 0(t0)
+			addi t1, t1, 8 
+			sh t1, 0(t0)
+
+			la t0, game.yellow_enemy.move_cooldown
+			sh zero, 0(t0)
+
+			ret
+		
+	 	 game.move_enemy.check_down:
+			lh t0, game.yellow_enemy.move_cooldown
+			li t1, 5000
+			bne t0, t1, game.move_enemy.end
+
+			mv t0, s3
+			lh t1, game.yellow_enemy.matrix_location
+			add t0, t1, t0
+			addi t0, t0, -1
+
+			#checa o pixel de cima
+			lb t1, 0(t0)
+			bne zero, t1, game.move_enemy.random_direction
+
+			# # atualiza a matriz
+			li t1, 8
+			sb t1, 0(t0)
+			addi t0, t0, 1
+			sb zero, 0(t0)
+
+			la t0, game.yellow_enemy.matrix_location
+			lh t1, game.yellow_enemy.matrix_location
+			addi t1, t1, -1
+			sh t1, 0(t0) 
+
+			la t0, game.yellow_enemy.position
+			la t1, game.yellow_enemy.old_position
+			lw t2, 0(t0)
+			sw t2, 0(t1)
+
+			lh t1, 0(t0)
+			addi t1, t1, -8 
+			sh t1, 0(t0)
+
+			la t0, game.yellow_enemy.move_cooldown
+			sh zero, 0(t0)
+
+		 	ret
+		
+	 	  game.move_enemy.check_right:
+			lh t0, game.yellow_enemy.move_cooldown
+			li t1, 5000
+			bne t0, t1, game.move_enemy.end
+
+	 		mv t0, s3
+			lh t1, game.yellow_enemy.matrix_location
+			add t0, t1, t0
+	 		addi t0, t0, 36
+
+	 		# checa o pixel da direita
+	 		lb t1, 0(t0)
+	 		bne zero, t1, game.move_enemy.random_direction
+
+	 		# atualiza a matriz
+			li t1, 8
+			sb t1, 0(t0)
+			addi t0, t0, -36
+			sb zero, 0(t0)
+
+			la t0, game.yellow_enemy.matrix_location
+			lh t1, game.yellow_enemy.matrix_location
+			addi t1, t1, 36
+			sh t1, 0(t0) 
+
+			la t0, game.yellow_enemy.position
+			la t1, game.yellow_enemy.old_position
+			lw t2, 0(t0)
+			sw t2, 0(t1)
+
+			lh t1, 2(t0)
+			addi t1, t1, 8 
+			sh t1, 2(t0)
+
+			la t0, game.yellow_enemy.move_cooldown
+			sh zero, 0(t0)
+
+			ret
+		
+	 	 game.move_enemy.check_left:
+			lh t0, game.yellow_enemy.move_cooldown
+			li t1, 7500
+			bne t0, t1, game.move_enemy.end
+
+			mv t0, s3
+			lh t1, game.yellow_enemy.matrix_location
+			add t0, t1, t0
+			addi t0, t0, -36
+
+			#checa o pixel de cima
+			lb t1, 0(t0)
+			bne zero, t1, game.move_enemy.random_direction
+
+			# # atualiza a matriz
+			li t1, 8
+			sb t1, 0(t0)
+			addi t0, t0, 36
+			sb zero, 0(t0)
+
+			la t0, game.yellow_enemy.matrix_location
+			lh t1, game.yellow_enemy.matrix_location
+			addi t1, t1, -36
+			sh t1, 0(t0) 
+
+			la t0, game.yellow_enemy.position
+			la t1, game.yellow_enemy.old_position
+			lw t2, 0(t0)
+			sw t2, 0(t1)
+			lh t1, 2(t0)
+			addi t1, t1, -8 
+			sh t1, 2(t0)
+
+			la t0, game.yellow_enemy.move_cooldown
+			sh zero, 0(t0)
+
+			ret
+game.move_enemy.end:
+ret
 
 .include "SYSTEMv21.s"
