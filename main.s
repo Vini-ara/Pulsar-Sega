@@ -2709,7 +2709,7 @@ music.PLAY:
   	la t1, music.num
   	lw t1, 0(t1)		# total number of notes
   	
-  	bgt t0, t1, music.RESET	# if the number of notes played is bigger than what is avilable, reset
+  	bge t0, t1, music.RESET	# if the number of notes played is bigger than what is avilable, reset
   	
   	la t1, music.note_counter
   	sw t0, 0(t1)
