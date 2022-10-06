@@ -2709,7 +2709,7 @@ music.PLAY:
   	la t1, music.num
   	lw t1, 0(t1)		# total number of notes
   	
-  	bge t0, t1, music.RESET	# if the number of notes played is bigger than what is avilable, reset
+  	bgt t0, t1, music.RESET	# if the number of notes played is bigger than what is avilable, reset
   	
   	la t1, music.note_counter
   	sw t0, 0(t1)
@@ -2939,3 +2939,4 @@ game.move_enemy.end:
 ret
 
 .include "SYSTEMv21.s"
+
